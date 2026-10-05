@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "FindMyEasy",
+    "slug": "findmyeasy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "findeasy",
+    "plugins": [
+      "expo-router"
+    ],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
