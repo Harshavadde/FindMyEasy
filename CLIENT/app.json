@@ -5,11 +5,20 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "findeasy",
+    "android": {
+  "package": "com.findmyeasy.app"
+},
     "plugins": [
       "expo-router"
     ],
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9d099335-bca2-432e-968d-715ed7d57297"
+      }
     }
   }
 }

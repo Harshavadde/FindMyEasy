@@ -122,7 +122,7 @@ export default function Index() {
               accent="#0D9488"
               accentSoft="#DDF7F2"
               icon="home-city"
-              onPress={() => router.push({ pathname: "/login", params: { role: "owner" } })}
+              onPress={() => router.push("/(owner)")}
             />
           </View>
 
