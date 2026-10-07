@@ -1,29 +1,18 @@
 from pydantic import BaseModel, Field, model_validator
 
 
-class ListingCreate(BaseModel):
-    owner_phone: str = Field(
-        min_length=10,
-        max_length=20,
+# ============================================================
+# SHARING CREATE
+# ============================================================
+
+class ListingSharingCreate(BaseModel):
+    sharing_type: str = Field(
+        min_length=1,
+        max_length=50,
     )
-
-    name: str = Field(
-        min_length=2,
-        max_length=200,
-    )
-
-    property_type: str
-    gender: str
-
-    description: str | None = None
 
     monthly_price: int = Field(
-        ge=0,
-    )
-
-    security_deposit: int | None = Field(
-        default=0,
-        ge=0,
+        gt=0,
     )
 
     total_beds: int = Field(
@@ -37,27 +26,6 @@ class ListingCreate(BaseModel):
     filled_beds: int = Field(
         ge=0,
     )
-
-    sharing: list[str] = []
-
-    ac_type: str
-
-    facilities: list[str] = []
-
-    food_available: str = "No"
-
-    breakfast_time: str | None = None
-    lunch_time: str | None = None
-    dinner_time: str | None = None
-
-    city: str
-    area: str
-    address: str
-
-    latitude: str | None = None
-    longitude: str | None = None
-
-    restrictions: str | None = None
 
     @model_validator(mode="after")
     def validate_beds(self):
@@ -79,41 +47,155 @@ class ListingCreate(BaseModel):
         return self
 
 
+# ============================================================
+# LISTING CREATE
+# ============================================================
+
+class ListingCreate(BaseModel):
+    owner_phone: str = Field(
+        min_length=10,
+        max_length=20,
+    )
+
+    name: str = Field(
+        min_length=2,
+        max_length=200,
+    )
+
+    property_type: str
+
+    gender: str
+
+    description: str | None = None
+
+    security_deposit: int | None = Field(
+        default=0,
+        ge=0,
+    )
+
+    # --------------------------------------------------------
+    # SHARING
+    # Each selected sharing has its own:
+    # - monthly price
+    # - total beds
+    # - available beds
+    # - filled beds
+    # --------------------------------------------------------
+
+    sharing: list[ListingSharingCreate] = Field(
+        min_length=1,
+    )
+
+    # --------------------------------------------------------
+    # PROPERTY
+    # --------------------------------------------------------
+
+    ac_type: str
+
+    facilities: list[str] = []
+
+    # --------------------------------------------------------
+    # FOOD
+    # --------------------------------------------------------
+
+    food_available: str = "No"
+
+    food_type: str | None = None
+
+    breakfast_start_time: str | None = None
+    breakfast_end_time: str | None = None
+
+    lunch_start_time: str | None = None
+    lunch_end_time: str | None = None
+
+    dinner_start_time: str | None = None
+    dinner_end_time: str | None = None
+
+    # --------------------------------------------------------
+    # LOCATION
+    # --------------------------------------------------------
+
+    city: str
+
+    area: str
+
+    address: str
+
+    latitude: str | None = None
+
+    longitude: str | None = None
+
+    restrictions: str | None = None
+
+
+# ============================================================
+# SHARING RESPONSE
+# ============================================================
+
+class ListingSharingResponse(BaseModel):
+    id: str
+    sharing_type: str
+    monthly_price: int
+    total_beds: int
+    available_beds: int
+    filled_beds: int
+
+
+# ============================================================
+# LISTING RESPONSE
+# ============================================================
+
 class ListingResponse(BaseModel):
     id: str
 
     owner_phone: str | None
 
     name: str
+
     property_type: str
+
     gender: str
 
     description: str | None
 
-    monthly_price: int
     security_deposit: int | None
 
-    total_beds: int
-    available_beds: int
-    filled_beds: int
-
-    sharing: list[str]
+    # Each listing can have multiple sharing types.
+    sharing: list[ListingSharingResponse]
 
     ac_type: str
 
     facilities: list[str]
 
+    # --------------------------------------------------------
+    # FOOD
+    # --------------------------------------------------------
+
     food_available: str
 
-    breakfast_time: str | None
-    lunch_time: str | None
-    dinner_time: str | None
+    food_type: str | None = None
+
+    breakfast_start_time: str | None = None
+    breakfast_end_time: str | None = None
+
+    lunch_start_time: str | None = None
+    lunch_end_time: str | None = None
+
+    dinner_start_time: str | None = None
+    dinner_end_time: str | None = None
+
+    # --------------------------------------------------------
+    # LOCATION
+    # --------------------------------------------------------
 
     city: str
+
     area: str
+
     address: str
 
     latitude: str | None
+
     longitude: str | None
 
     restrictions: str | None

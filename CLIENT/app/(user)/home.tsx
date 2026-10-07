@@ -1,140 +1,171 @@
-import { StyleSheet, Text, View, TextInput, ScrollView } from "react-native";
+import { useCallback, useEffect, useState } from "react";
 
-export default function Home() {
+import {
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+
+import { router } from "expo-router";
+
+import ListingCard from "../../components/ListingCard";
+import {
+  getPublicListings,
+} from "../../services/api";
+
+import type { Listing } from "../../types/listing";
+
+export default function UserHome() {
+  const [listings, setListings] =
+    useState<Listing[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const loadListings = useCallback(
+    async () => {
+      try {
+        const data =
+          await getPublicListings();
+
+        setListings(data);
+      } catch (error: any) {
+        console.error(
+          "User listings error:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to load properties",
+          error?.message ||
+            "Please check your internet connection and try again."
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    loadListings();
+  }, [loadListings]);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadListings();
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.location}>📍 Hyderabad</Text>
+    <View className="flex-1 bg-[#F5F9FD]">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+          />
+        }
+        contentContainerStyle={{
+          paddingHorizontal: 20,
+          paddingTop: 55,
+          paddingBottom: 40,
+        }}
+      >
+        <Text className="text-[13px] font-bold text-[#2563EB]">
+          FindMyEasy
+        </Text>
 
-      <Text style={styles.title}>
-        Find a place to stay
-      </Text>
+        <Text className="mt-1 text-[27px] font-extrabold text-[#0F172A]">
+          Find your perfect stay
+        </Text>
 
-      <TextInput
-        placeholder="Search PG or Hostel"
-        style={styles.search}
-      />
+        <Text className="mt-2 text-[13px] leading-5 text-[#64748B]">
+          Explore PGs and hostels from owners around you.
+        </Text>
 
-      <Text style={styles.sectionTitle}>
-        Looking for
-      </Text>
+        <View className="mt-6 rounded-[18px] bg-[#2563EB] p-5">
+          <Text className="text-[12px] font-bold text-[#BFDBFE]">
+            AVAILABLE PROPERTIES
+          </Text>
 
-      <View style={styles.categoryContainer}>
-        <View style={styles.category}>
-          <Text style={styles.categoryEmoji}>🏠</Text>
-          <Text>PG</Text>
+          <Text className="mt-1 text-[28px] font-extrabold text-white">
+            {listings.length}
+          </Text>
+
+          <Text className="mt-1 text-[11px] text-[#DBEAFE]">
+            PGs & hostels available right now
+          </Text>
         </View>
 
-        <View style={styles.category}>
-          <Text style={styles.categoryEmoji}>🏨</Text>
-          <Text>Hostel</Text>
+        <View className="mt-7 flex-row items-center justify-between">
+          <View>
+            <Text className="text-[19px] font-extrabold text-[#0F172A]">
+              All Properties
+            </Text>
+
+            <Text className="mt-1 text-[11px] text-[#64748B]">
+              Properties from all owners
+            </Text>
+          </View>
+
+          <Text className="text-[12px] font-bold text-[#2563EB]">
+            {listings.length} found
+          </Text>
         </View>
-      </View>
 
-      <Text style={styles.sectionTitle}>
-        Nearby PGs & Hostels
-      </Text>
+        <View className="mt-4">
+          {loading ? (
+            <View className="items-center py-16">
+              <ActivityIndicator
+                size="large"
+                color="#2563EB"
+              />
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          Sri Sai Boys PG
-        </Text>
+              <Text className="mt-3 text-[12px] text-[#64748B]">
+                Loading properties...
+              </Text>
+            </View>
+          ) : listings.length === 0 ? (
+            <View className="items-center rounded-[20px] bg-white p-8">
+              <Text className="text-[42px]">
+                🏠
+              </Text>
 
-        <Text style={styles.cardLocation}>
-          Madhapur, Hyderabad
-        </Text>
+              <Text className="mt-4 text-center text-[17px] font-extrabold text-[#0F172A]">
+                No properties found
+              </Text>
 
-        <Text style={styles.price}>
-          ₹7,500 / month
-        </Text>
-
-        <Text style={styles.available}>
-          3 beds available
-        </Text>
-      </View>
-    </ScrollView>
+              <Text className="mt-2 text-center text-[12px] leading-5 text-[#64748B]">
+                No PGs or hostels have been added yet.
+              </Text>
+            </View>
+          ) : (
+            listings.map((listing) => (
+              <ListingCard
+                key={listing.id}
+                listing={listing}
+                onPress={() =>
+                  router.push({
+                    pathname:
+                      "/(user)/listing/[id]",
+                    params: {
+                      id: listing.id,
+                    },
+                  })
+                }
+              />
+            ))
+          )}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#FFFFFF",
-  },
-
-  location: {
-    fontSize: 14,
-    color: "#555555",
-  },
-
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginTop: 15,
-  },
-
-  search: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    marginTop: 20,
-  },
-
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginTop: 30,
-    marginBottom: 15,
-  },
-
-  categoryContainer: {
-    flexDirection: "row",
-    gap: 12,
-  },
-
-  category: {
-    width: 110,
-    height: 100,
-    borderWidth: 1,
-    borderColor: "#EEEEEE",
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  categoryEmoji: {
-    fontSize: 30,
-    marginBottom: 8,
-  },
-
-  card: {
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#EEEEEE",
-    borderRadius: 14,
-    marginBottom: 20,
-  },
-
-  cardTitle: {
-    fontSize: 19,
-    fontWeight: "700",
-  },
-
-  cardLocation: {
-    marginTop: 6,
-    color: "#666666",
-  },
-
-  price: {
-    marginTop: 12,
-    fontSize: 17,
-    fontWeight: "600",
-  },
-
-  available: {
-    marginTop: 5,
-    color: "#15803D",
-  },
-});

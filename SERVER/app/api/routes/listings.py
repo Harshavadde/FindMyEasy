@@ -19,32 +19,60 @@ def listing_to_response(
 ) -> ListingResponse:
     return ListingResponse(
         id=listing.id,
+
         owner_phone=listing.owner_phone,
+
         name=listing.name,
+
         property_type=listing.property_type,
+
         gender=listing.gender,
+
         description=listing.description,
-        monthly_price=listing.monthly_price,
+
         security_deposit=listing.security_deposit,
-        total_beds=listing.total_beds,
-        available_beds=listing.available_beds,
-        filled_beds=listing.filled_beds,
+
         sharing=[
-            item.sharing_type
+            {
+                "id": item.id,
+                "sharing_type": item.sharing_type,
+                "monthly_price": item.monthly_price,
+                "total_beds": item.total_beds,
+                "available_beds": item.available_beds,
+                "filled_beds": item.filled_beds,
+            }
             for item in listing.sharing
         ],
+
         ac_type=listing.ac_type,
+
         facilities=listing.facilities or [],
+
         food_available=listing.food_available,
-        breakfast_time=listing.breakfast_time,
-        lunch_time=listing.lunch_time,
-        dinner_time=listing.dinner_time,
+
+        food_type=listing.food_type,
+
+        breakfast_start_time=listing.breakfast_start_time,
+        breakfast_end_time=listing.breakfast_end_time,
+
+        lunch_start_time=listing.lunch_start_time,
+        lunch_end_time=listing.lunch_end_time,
+
+        dinner_start_time=listing.dinner_start_time,
+        dinner_end_time=listing.dinner_end_time,
+
         city=listing.city,
+
         area=listing.area,
+
         address=listing.address,
+
         latitude=listing.latitude,
+
         longitude=listing.longitude,
+
         restrictions=listing.restrictions,
+
         status=listing.status,
     )
 

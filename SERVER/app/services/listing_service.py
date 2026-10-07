@@ -76,30 +76,38 @@ def create_listing(
         return existing_listing, True
 
     listing = Listing(
-        owner_phone=data.owner_phone,
-        name=data.name,
-        property_type=data.property_type,
-        gender=data.gender,
-        description=data.description,
-        monthly_price=data.monthly_price,
-        security_deposit=data.security_deposit,
-        total_beds=data.total_beds,
-        available_beds=data.available_beds,
-        filled_beds=data.filled_beds,
-        ac_type=data.ac_type,
-        facilities=data.facilities,
-        food_available=data.food_available,
-        breakfast_time=data.breakfast_time,
-        lunch_time=data.lunch_time,
-        dinner_time=data.dinner_time,
-        city=data.city,
-        area=data.area,
-        address=data.address,
-        latitude=data.latitude,
-        longitude=data.longitude,
-        restrictions=data.restrictions,
-        status="draft",
-    )
+    owner_phone=data.owner_phone,
+    name=data.name,
+    property_type=data.property_type,
+    gender=data.gender,
+    description=data.description,
+
+    security_deposit=data.security_deposit,
+
+    ac_type=data.ac_type,
+    facilities=data.facilities,
+
+    food_available=data.food_available,
+    food_type=data.food_type,
+
+    breakfast_start_time=data.breakfast_start_time,
+    breakfast_end_time=data.breakfast_end_time,
+
+    lunch_start_time=data.lunch_start_time,
+    lunch_end_time=data.lunch_end_time,
+
+    dinner_start_time=data.dinner_start_time,
+    dinner_end_time=data.dinner_end_time,
+
+    city=data.city,
+    area=data.area,
+    address=data.address,
+
+    latitude=data.latitude,
+    longitude=data.longitude,
+
+    restrictions=data.restrictions,
+)
 
     db.add(listing)
     db.flush()

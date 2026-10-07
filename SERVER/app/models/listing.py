@@ -112,11 +112,19 @@ class Listing(Base):
         server_default="No",
     )
 
-    breakfast_time = Column(String(50), nullable=True)
+    food_type = Column(
+    String(20),
+    nullable=True,
+)
 
-    lunch_time = Column(String(50), nullable=True)
+    breakfast_start_time = Column(String(20), nullable=True)
+    breakfast_end_time = Column(String(20), nullable=True)
 
-    dinner_time = Column(String(50), nullable=True)
+    lunch_start_time = Column(String(20), nullable=True)
+    lunch_end_time = Column(String(20), nullable=True)
+
+    dinner_start_time = Column(String(20), nullable=True)
+    dinner_end_time = Column(String(20), nullable=True)
 
     # ------------------------------------------------------------------
     # LOCATION
