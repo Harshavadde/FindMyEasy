@@ -75,50 +75,80 @@ def create_listing(
     if existing_listing:
         return existing_listing, True
 
+    # -------------------------------------------------------------------------
+    # CREATE MAIN LISTING
+    # -------------------------------------------------------------------------
+
     listing = Listing(
-    owner_phone=data.owner_phone,
-    name=data.name,
-    property_type=data.property_type,
-    gender=data.gender,
-    description=data.description,
+        owner_phone=data.owner_phone,
+        name=data.name,
+        property_type=data.property_type,
+        gender=data.gender,
+        description=data.description,
+        security_deposit=data.security_deposit,
 
-    security_deposit=data.security_deposit,
+        # ---------------------------------------------------------------------
+        # OLD GLOBAL FIELDS
+        # ---------------------------------------------------------------------
+        # These are kept temporarily because the existing SQLite database
+        # still has these columns as NOT NULL.
+        #
+        # Actual pricing and bed capacity are stored in listing_sharing.
+        # ---------------------------------------------------------------------
+        monthly_price=0,
+        total_beds=0,
+        available_beds=0,
+        filled_beds=0,
 
-    ac_type=data.ac_type,
-    facilities=data.facilities,
+        ac_type=data.ac_type,
+        facilities=data.facilities,
 
-    food_available=data.food_available,
-    food_type=data.food_type,
+        food_available=data.food_available,
+        food_type=data.food_type,
 
-    breakfast_start_time=data.breakfast_start_time,
-    breakfast_end_time=data.breakfast_end_time,
+        breakfast_start_time=data.breakfast_start_time,
+        breakfast_end_time=data.breakfast_end_time,
 
-    lunch_start_time=data.lunch_start_time,
-    lunch_end_time=data.lunch_end_time,
+        lunch_start_time=data.lunch_start_time,
+        lunch_end_time=data.lunch_end_time,
 
-    dinner_start_time=data.dinner_start_time,
-    dinner_end_time=data.dinner_end_time,
+        dinner_start_time=data.dinner_start_time,
+        dinner_end_time=data.dinner_end_time,
 
-    city=data.city,
-    area=data.area,
-    address=data.address,
+        city=data.city,
+        area=data.area,
+        address=data.address,
 
-    latitude=data.latitude,
-    longitude=data.longitude,
+        latitude=data.latitude,
+        longitude=data.longitude,
 
-    restrictions=data.restrictions,
-)
+        restrictions=data.restrictions,
+    )
 
     db.add(listing)
+
+    # Flush first so listing.id is available for listing_sharing rows.
     db.flush()
 
-    for sharing_type in data.sharing:
-        db.add(
-            ListingSharing(
-                listing_id=listing.id,
-                sharing_type=sharing_type,
-            )
+    # -------------------------------------------------------------------------
+    # CREATE SHARING ROWS
+    # -------------------------------------------------------------------------
+
+    for sharing in data.sharing:
+        sharing_row = ListingSharing(
+            listing_id=listing.id,
+            sharing_type=sharing.sharing_type,
+            monthly_price=sharing.monthly_price,
+            total_beds=sharing.total_beds,
+            available_beds=sharing.available_beds,
+            filled_beds=sharing.filled_beds,
         )
+
+        db.add(sharing_row)
+
+    # -------------------------------------------------------------------------
+    # SAVE
+    # -------------------------------------------------------------------------
 
     db.commit()
     db.refresh(listing)

@@ -183,6 +183,12 @@ class Listing(Base):
         lazy="selectin",
     )
 
+    members = relationship(
+    "HostelMember",
+    back_populates="listing",
+    cascade="all, delete-orphan",
+)
+
     def __repr__(self) -> str:
         return (
             f"<Listing id={self.id!r} name={self.name!r} "

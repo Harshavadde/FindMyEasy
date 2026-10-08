@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
@@ -8,17 +10,15 @@ class ListingSharing(Base):
     __tablename__ = "listing_sharing"
 
     id = Column(
-        Integer,
+        String,
         primary_key=True,
-        autoincrement=True,
+        default=lambda: str(uuid.uuid4()),
+        nullable=False,
     )
 
     listing_id = Column(
         String,
-        ForeignKey(
-            "listings.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("listings.id", ondelete="CASCADE"),
         nullable=False,
     )
 
@@ -53,5 +53,10 @@ class ListingSharing(Base):
 
     listing = relationship(
         "Listing",
+        back_populates="sharing",
+    )
+
+    members = relationship(
+        "HostelMember",
         back_populates="sharing",
     )

@@ -10,6 +10,8 @@ from app.db.database import Base, engine
 from app.models.listing_image import ListingImage
 from app.api.routes.images import router as images_router
 from app.api.routes.public_listings import router as public_listings_router
+from app.models.hostel_member import HostelMember
+from app.api.routes.members import router as members_router
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +81,7 @@ app.include_router(
 )
 
 app.include_router(public_listings_router)
+app.include_router(members_router)
 
 # ---------------------------------------------------------------------------
 # Health
