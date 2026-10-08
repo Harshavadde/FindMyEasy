@@ -115,14 +115,19 @@ export default function Index() {
               onPress={() => router.push({ pathname: "/login", params: { role: "user" } })}
             />
 
-            <RoleCard
-              title="I'M OWNER"
-              subtitle="Add and manage your PG or hostel"
-              cta="List your property"
-              accent="#0D9488"
-              accentSoft="#DDF7F2"
-              icon="home-city"
-              onPress={() => router.push("/(owner)")}
+                      <RoleCard
+            title="I'M OWNER"
+            subtitle="Add and manage your PG or hostel"
+            cta="List your property"
+            accent="#0D9488"
+            accentSoft="#DDF7F2"
+            icon="home-city"
+            onPress={() =>
+              router.push({
+                pathname: "/login",
+                params: { role: "owner" },
+              })
+            }
             />
           </View>
 

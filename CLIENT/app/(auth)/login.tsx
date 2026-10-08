@@ -5,9 +5,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 export default function Login() {
+  const { role } = useLocalSearchParams<{
+    role?: "user" | "owner";
+  }>();
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to FindEasy</Text>
@@ -30,7 +34,15 @@ export default function Login() {
 
       <Pressable
         style={styles.button}
-        onPress={() => router.replace("/home")}
+        onPress={() => {
+          console.log("Selected role:", role);
+
+          if (role === "owner") {
+            router.replace("/(owner)");
+          } else {
+            router.replace("/(user)/selectyourFinding/category");
+          }
+        }}
       >
         <Text style={styles.buttonText}>Login</Text>
       </Pressable>
