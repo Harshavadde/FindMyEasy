@@ -1,5 +1,5 @@
-import { useRef, useState, type ReactNode } from "react";
 
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 
 import {
@@ -34,7 +34,7 @@ import {
 
 
 
-import { router } from "expo-router";
+import { router, useLocalSearchParams  } from "expo-router";
 
 import * as Location from "expo-location";
 
@@ -244,6 +244,14 @@ function toMinutes(value: string): number | null {
 
 export default function CreateListing() {
 
+
+  const { listingId, mode } = useLocalSearchParams<{
+  listingId?: string;
+  mode?: string;
+}>();
+
+const isEditMode = mode === "edit" && Boolean(listingId);
+
   // --------------------------------------------------------------------------
 
   // Basic
@@ -370,6 +378,113 @@ export default function CreateListing() {
   const [restrictions, setRestrictions] = useState("");
 
   const [isCreating, setIsCreating] = useState(false);
+
+
+  
+  useEffect(() => {
+    if (!isEditMode || !listingId) return;
+
+    let cancelled = false;
+
+    const loadListingForEdit = async () => {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/v1/owner/listings/${encodeURIComponent(listingId)}`
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.detail || "Could not load property details."
+          );
+        }
+
+        if (cancelled) return;
+
+        setPropertyName(data.name ?? "");
+        setOwnerPhone(data.owner_phone ?? "");
+        setPropertyType(data.property_type ?? "PG");
+        setGender(data.gender ?? "Men's");
+        setDescription(data.description ?? "");
+        setSecurityDeposit(
+          data.security_deposit != null
+            ? String(data.security_deposit)
+            : ""
+        );
+
+        setSharingPricing(
+          (data.sharing ?? []).map((item: any) => ({
+            sharing_type: String(item.sharing_type) as SharingType,
+            monthly_price: String(item.monthly_price ?? ""),
+            total_beds: String(item.total_beds ?? ""),
+            available_beds: String(item.available_beds ?? ""),
+            filled_beds: String(item.filled_beds ?? ""),
+          }))
+        );
+
+        setAcType(data.ac_type ?? "Non-AC");
+        setFacilities(data.facilities ?? []);
+        setFoodAvailable(data.food_available ?? "No");
+        setFoodType(data.food_type ?? "Veg");
+
+        setBreakfastStart(data.breakfast_start_time ?? "");
+        setBreakfastEnd(data.breakfast_end_time ?? "");
+        setLunchStart(data.lunch_start_time ?? "");
+        setLunchEnd(data.lunch_end_time ?? "");
+        setDinnerStart(data.dinner_start_time ?? "");
+        setDinnerEnd(data.dinner_end_time ?? "");
+
+        setCity(data.city ?? "");
+        setArea(data.area ?? "");
+        setAddress(data.address ?? "");
+        setRestrictions(data.restrictions ?? "");
+
+        const lat =
+          data.latitude != null ? Number(data.latitude) : null;
+        const lng =
+          data.longitude != null ? Number(data.longitude) : null;
+
+        if (
+          lat !== null &&
+          lng !== null &&
+          Number.isFinite(lat) &&
+          Number.isFinite(lng)
+        ) {
+          setLatitude(lat);
+          setLongitude(lng);
+
+          const location = {
+            latitude: lat,
+            longitude: lng,
+          };
+
+          setSelectedLocation(location);
+          setMapRegion({
+            ...location,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          Alert.alert(
+            "Unable to load property",
+            error instanceof Error
+              ? error.message
+              : "Please try again."
+          );
+        }
+      }
+    };
+
+    void loadListingForEdit();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditMode, listingId]);
+
 
 
 
@@ -750,13 +865,51 @@ export default function CreateListing() {
 
 
 
-      const data = await postJson<{ id?: number | string; status?: string }>(
+      
+      const url = isEditMode
+        ? `${API_BASE_URL}/api/v1/owner/listings/${encodeURIComponent(String(listingId))}`
+        : `${API_BASE_URL}${CREATE_LISTING_PATH}`;
 
-        CREATE_LISTING_PATH,
+      const response = await fetch(url, {
+        method: isEditMode ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-        payload
+      const data = await response.json();
 
-      );
+      
+      if (!response.ok) {
+        throw new Error(
+          data?.detail ||
+            (isEditMode
+              ? "Failed to update property."
+              : "Failed to create property.")
+        );
+      }
+
+      if (isEditMode) {
+        router.replace({
+          pathname: "/(owner)/listings/listing-details",
+          params: { listingId: String(listingId) },
+        });
+        return;
+      }
+
+      if (data?.id === undefined || data?.id === null) {
+        throw new Error(
+          "Property was created, but the server did not return its ID."
+        );
+      }
+
+      router.push({
+        pathname: "/(owner)/listings/photos",
+        params: { listingId: String(data.id) },
+      });
+
+
 
 
 
@@ -1260,7 +1413,7 @@ export default function CreateListing() {
 
               <Text className="text-[25px] font-extrabold text-[#0F172A]">
 
-                Add Property
+                {isEditMode ? "Edit Property" : "Add Property"}
 
               </Text>
 
@@ -2148,7 +2301,7 @@ export default function CreateListing() {
 
               <Text className="text-[15px] font-extrabold text-white">
 
-                Save & Continue to Photos
+                {isEditMode ? "Update Property" : "Save & Continue to Photos"}
 
               </Text>
 

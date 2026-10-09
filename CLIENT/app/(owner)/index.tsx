@@ -676,17 +676,20 @@ export default function OwnerDashboard() {
               </Text>
             </Pressable>
 
-            <Pressable
-              className="items-center"
-            >
-              <Text className="text-[21px]">
-                👤
-              </Text>
+            
+          <Pressable
+            className="items-center"
+            onPress={() => router.push("/(owner)/profile")}
+          >
+            <Text className="text-[21px]">
+              👤
+            </Text>
 
-              <Text className="mt-1 text-[10px] font-medium text-[#64748B]">
-                Profile
-              </Text>
-            </Pressable>
+            <Text className="mt-1 text-[10px] font-medium text-[#64748B]">
+              Profile
+            </Text>
+          </Pressable>
+
 
           </View>
 

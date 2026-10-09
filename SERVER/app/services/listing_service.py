@@ -26,30 +26,29 @@ def normalize_phone(value: str | None) -> str:
     return re.sub(r"\D", "", value)
 
 
+
 def find_duplicate_listing(
     db: Session,
     data: ListingCreate,
+    exclude_listing_id: str | None = None,
 ) -> Listing | None:
-    """
-    Find a likely duplicate using owner phone + location/address.
-
-    Phone is used as a strong verification signal.
-    We do NOT treat the same area alone as a duplicate because
-    multiple different hostels can exist in the same area.
-    """
+    """Find another listing with the same owner and location/address."""
 
     owner_phone = normalize_phone(data.owner_phone)
     city = normalize_text(data.city)
     area = normalize_text(data.area)
     address = normalize_text(data.address)
 
-    listings = db.query(Listing).all()
+    query = db.query(Listing)
+
+    if exclude_listing_id:
+        query = query.filter(Listing.id != exclude_listing_id)
+
+    listings = query.all()
 
     for listing in listings:
         existing_phone = normalize_phone(listing.owner_phone)
 
-        # Strong duplicate signal:
-        # same owner phone + same city + same area + same address
         if (
             owner_phone
             and existing_phone
@@ -63,6 +62,7 @@ def find_duplicate_listing(
     return None
 
 
+
 def create_listing(
     db: Session,
     data: ListingCreate,
@@ -74,6 +74,46 @@ def create_listing(
 
     if existing_listing:
         return existing_listing, True
+
+    
+    # Calculate main listing bed counts from all sharing types
+    total_beds = sum(
+        int(sharing.total_beds or 0)
+        for sharing in data.sharing
+    )
+
+    available_beds = sum(
+        int(sharing.available_beds or 0)
+        for sharing in data.sharing
+    )
+
+    filled_beds = sum(
+        int(sharing.filled_beds or 0)
+        for sharing in data.sharing
+    )
+
+    # Main listing price: use the lowest sharing price as the legacy value
+    prices = [
+        float(sharing.monthly_price or 0)
+        for sharing in data.sharing
+        if float(sharing.monthly_price or 0) > 0
+    ]
+    monthly_price = min(prices) if prices else 0
+
+    # Do not allow an empty or invalid bed capacity
+    if total_beds <= 0:
+        raise ValueError(
+            "Total beds must be greater than zero across all sharing types."
+        )
+
+    if available_beds < 0 or filled_beds < 0:
+        raise ValueError("Bed counts cannot be negative.")
+
+    if available_beds + filled_beds != total_beds:
+        raise ValueError(
+            "Available beds + filled beds must equal total beds."
+        )
+
 
     # -------------------------------------------------------------------------
     # CREATE MAIN LISTING
@@ -95,10 +135,10 @@ def create_listing(
         #
         # Actual pricing and bed capacity are stored in listing_sharing.
         # ---------------------------------------------------------------------
-        monthly_price=0,
-        total_beds=0,
-        available_beds=0,
-        filled_beds=0,
+        monthly_price=monthly_price,
+        total_beds=total_beds,
+        available_beds=available_beds,
+        filled_beds=filled_beds,
 
         ac_type=data.ac_type,
         facilities=data.facilities,
@@ -152,5 +192,131 @@ def create_listing(
 
     db.commit()
     db.refresh(listing)
+
+    return listing, False
+
+
+
+def update_listing(
+    db: Session,
+    listing_id: str,
+    data: ListingCreate,
+):
+    listing = (
+        db.query(Listing)
+        .filter(Listing.id == listing_id)
+        .first()
+    )
+
+    if not listing:
+        return None, False
+
+    # Verify that the listing belongs to this owner.
+    if (
+        normalize_phone(listing.owner_phone)
+        != normalize_phone(data.owner_phone)
+    ):
+        raise PermissionError("You cannot update this property.")
+
+    # Check for another property at the submitted location.
+    duplicate = find_duplicate_listing(
+        db=db,
+        data=data,
+        exclude_listing_id=listing_id,
+    )
+
+    if duplicate:
+        return None, True
+
+    # Validate sharing bed counts.
+    total_beds = sum(
+        int(item.total_beds or 0) for item in data.sharing
+    )
+    available_beds = sum(
+        int(item.available_beds or 0) for item in data.sharing
+    )
+    filled_beds = sum(
+        int(item.filled_beds or 0) for item in data.sharing
+    )
+
+    if total_beds <= 0:
+        raise ValueError(
+            "Total beds must be greater than zero."
+        )
+
+    if (
+        available_beds < 0
+        or filled_beds < 0
+        or available_beds + filled_beds != total_beds
+    ):
+        raise ValueError(
+            "Available beds + filled beds must equal total beds."
+        )
+
+    prices = [
+        float(item.monthly_price or 0)
+        for item in data.sharing
+        if float(item.monthly_price or 0) > 0
+    ]
+    monthly_price = min(prices) if prices else 0
+
+    # Update the existing property. Do not create a new Listing.
+    listing.name = data.name
+    listing.property_type = data.property_type
+    listing.gender = data.gender
+    listing.description = data.description
+    listing.security_deposit = data.security_deposit
+
+    listing.monthly_price = monthly_price
+    listing.total_beds = total_beds
+    listing.available_beds = available_beds
+    listing.filled_beds = filled_beds
+
+    listing.ac_type = data.ac_type
+    listing.facilities = data.facilities
+
+    listing.food_available = data.food_available
+    listing.food_type = data.food_type
+
+    listing.breakfast_start_time = data.breakfast_start_time
+    listing.breakfast_end_time = data.breakfast_end_time
+    listing.lunch_start_time = data.lunch_start_time
+    listing.lunch_end_time = data.lunch_end_time
+    listing.dinner_start_time = data.dinner_start_time
+    listing.dinner_end_time = data.dinner_end_time
+
+    # Location is editable, but does not have to change.
+    listing.city = data.city
+    listing.area = data.area
+    listing.address = data.address
+    listing.latitude = data.latitude
+    listing.longitude = data.longitude
+
+    listing.restrictions = data.restrictions
+
+    # Keep the existing property status unchanged.
+    # Update sharing rows belonging to this listing only.
+    db.query(ListingSharing).filter(
+        ListingSharing.listing_id == listing_id
+    ).delete(synchronize_session=False)
+
+    for item in data.sharing:
+        db.add(
+            ListingSharing(
+                listing_id=listing_id,
+                sharing_type=item.sharing_type,
+                monthly_price=item.monthly_price,
+                total_beds=item.total_beds,
+                available_beds=item.available_beds,
+                filled_beds=item.filled_beds,
+            )
+        )
+
+    try:
+        db.commit()
+        db.refresh(listing)
+    except Exception:
+        db.rollback()
+        raise
 
     return listing, False

@@ -591,54 +591,66 @@ export default function MembersScreen() {
                 </View>
 
 
-                {/* Aadhaar + Delete */}
-                <View className="mt-4 flex-row items-center justify-between">
-
-                  <View
-                    className={`rounded-lg px-3 py-2 ${
-                      member.aadhaar_photo_available
-                        ? "bg-[#EFF6FF]"
-                        : "bg-[#F8FAFC]"
-                    }`}
-                  >
-                    <Text
-                      className={`text-[11px] font-semibold ${
+                
+                  {/* Aadhaar + Edit + Delete */}
+                  <View className="mt-4 flex-row items-center justify-between">
+                    <View
+                      className={`rounded-lg px-3 py-2 ${
                         member.aadhaar_photo_available
-                          ? "text-[#2563EB]"
-                          : "text-[#64748B]"
+                          ? "bg-[#EFF6FF]"
+                          : "bg-[#F8FAFC]"
                       }`}
                     >
-                      {member.aadhaar_photo_available
-                        ? "Aadhaar Uploaded"
-                        : "No Aadhaar Photo"}
-                    </Text>
+                      <Text
+                        className={`text-[11px] font-semibold ${
+                          member.aadhaar_photo_available
+                            ? "text-[#2563EB]"
+                            : "text-[#64748B]"
+                        }`}
+                      >
+                        {member.aadhaar_photo_available
+                          ? "Aadhaar Uploaded"
+                          : "No Aadhaar Photo"}
+                      </Text>
+                    </View>
+
+                    <View className="flex-row items-center">
+                      <Pressable
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(owner)/members/add",
+                            params: {
+                              listingId,
+                              ownerPhone,
+                              memberId: String(member.id),
+                              mode: "edit",
+                            },
+                          })
+                        }
+                        className="mr-2 rounded-lg bg-[#EFF6FF] px-3 py-2"
+                      >
+                        <Text className="text-[11px] font-bold text-[#2563EB]">
+                          Edit
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        disabled={deletingId === member.id}
+                        onPress={() => handleDelete(member)}
+                        className="rounded-lg bg-[#FEF2F2] px-3 py-2"
+                      >
+                        {deletingId === member.id ? (
+                          <ActivityIndicator size="small" color="#DC2626" />
+                        ) : (
+                          <Text className="text-[11px] font-bold text-[#DC2626]">
+                            Delete
+                          </Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  </View>
                   </View>
 
-
-                  <Pressable
-                    disabled={
-                      deletingId === member.id
-                    }
-                    onPress={() =>
-                      handleDelete(member)
-                    }
-                    className="rounded-lg bg-[#FEF2F2] px-3 py-2"
-                  >
-                    {deletingId === member.id ? (
-                      <ActivityIndicator
-                        size="small"
-                        color="#DC2626"
-                      />
-                    ) : (
-                      <Text className="text-[11px] font-bold text-[#DC2626]">
-                        Delete
-                      </Text>
-                    )}
-                  </Pressable>
-
-                </View>
-
-              </View>
 
             ))
           )}

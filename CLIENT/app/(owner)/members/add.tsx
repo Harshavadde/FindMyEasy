@@ -13,7 +13,11 @@ import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { API_BASE_URL } from "../../../constants/api";
-import { addMember } from "../../../services/memberApi";
+import {
+  addMember,
+  getMember,
+  updateMember,
+} from "../../../services/memberApi";
 
 import type {
   ListingSharing,
@@ -24,13 +28,28 @@ import type {
 export default function AddMemberScreen() {
   const router = useRouter();
 
-  const params = useLocalSearchParams<{
-    listingId: string;
-    ownerPhone?: string;
-  }>();
+  
+const params = useLocalSearchParams<{
+  listingId: string | string[];
+  ownerPhone?: string | string[];
+  memberId?: string | string[];
+  mode?: string | string[];
+}>();
 
-  const listingId = params.listingId;
-  const ownerPhone = params.ownerPhone ?? "";
+const listingId = Array.isArray(params.listingId)
+  ? params.listingId[0]
+  : params.listingId;
+
+const ownerPhone = Array.isArray(params.ownerPhone)
+  ? params.ownerPhone[0] ?? ""
+  : params.ownerPhone ?? "";
+
+const memberId = Array.isArray(params.memberId)
+  ? params.memberId[0]
+  : params.memberId;
+
+const isEditMode = params.mode === "edit" || Boolean(memberId);
+
 
   const [sharingOptions, setSharingOptions] = useState<
     ListingSharing[]
@@ -69,8 +88,48 @@ export default function AddMemberScreen() {
 
 
   useEffect(() => {
-    loadSharingOptions();
-  }, []);
+  loadSharingOptions();
+}, [listingId]);
+
+useEffect(() => {
+  if (isEditMode && memberId && listingId && ownerPhone) {
+    loadMemberForEdit();
+  }
+}, [isEditMode, memberId, listingId, ownerPhone]);
+
+async function loadMemberForEdit() {
+  try {
+    setSaving(true);
+
+    const member = await getMember(
+      listingId,
+      memberId!,
+      ownerPhone
+    );
+
+    setName(member.name ?? "");
+    setPhone(member.phone ?? "");
+    setRoomNumber(member.room_number ?? "");
+    setAmountToPay(String(member.amount_to_pay ?? ""));
+    setAmountPaid(String(member.amount_paid ?? ""));
+    setFoodPreference(member.food_preference ?? "veg");
+    setJoiningDate(member.joining_date ?? "");
+    setLeavingDate(member.leaving_date ?? "");
+
+    if (member.sharing_id) {
+      setSharingId(String(member.sharing_id));
+    }
+  } catch (error) {
+    Alert.alert(
+      "Unable to Load Member",
+      error instanceof Error
+        ? error.message
+        : "Failed to load the existing member."
+    );
+  } finally {
+    setSaving(false);
+  }
+}
 
 
   async function loadSharingOptions() {
@@ -101,14 +160,11 @@ export default function AddMemberScreen() {
       setSharingOptions(options);
 
       if (options.length > 0) {
-        setSharingId(options[0].id);
-
-        const firstOption = options[0];
-
-        setAmountToPay(
-          String(firstOption.monthly_price),
-        );
+      if (!isEditMode) {
+        setSharingId(String(options[0].id));
+        setAmountToPay(String(options[0].monthly_price));
       }
+    }
     } catch (error) {
       const message =
         error instanceof Error
@@ -261,85 +317,93 @@ export default function AddMemberScreen() {
   }
 
 
-  async function handleSave() {
-    const validationError =
-      validateForm();
+ 
+async function handleSave() {
+  const validationError = validateForm();
 
-    if (validationError) {
-      Alert.alert(
-        "Check Details",
-        validationError,
-      );
-      return;
+  if (validationError) {
+    Alert.alert("Check Details", validationError);
+    return;
+  }
+
+  if (!listingId) {
+    Alert.alert("Error", "Listing information is missing.");
+    return;
+  }
+
+  if (!ownerPhone) {
+    Alert.alert("Error", "Owner information is missing.");
+    return;
+  }
+
+  if (isEditMode && !memberId) {
+    Alert.alert("Error", "Member ID is missing.");
+    return;
+  }
+
+  const input = {
+    ownerPhone,
+    name: name.trim(),
+    phone: phone.trim(),
+    sharingId,
+    roomNumber: roomNumber.trim(),
+    amountToPay: Number(amountToPay),
+    amountPaid: Number(amountPaid || "0"),
+    foodPreference,
+    joiningDate: joiningDate.trim(),
+    leavingDate: leavingDate.trim() || undefined,
+    aadhaarPhotoUri,
+  };
+
+  try {
+    setSaving(true);
+
+    // Update the existing member or add a new member.
+    if (isEditMode && memberId) {
+      await updateMember(listingId, memberId, input);
+    } else {
+      await addMember(listingId, input);
     }
 
-    try {
-      setSaving(true);
-
-      await addMember(
-        listingId,
+    Alert.alert(
+      isEditMode ? "Member Updated" : "Member Added",
+      `${name.trim()} ${
+        isEditMode
+          ? "has been updated successfully."
+          : "has been added successfully."
+      }`,
+      [
         {
-          ownerPhone,
-
-          name: name.trim(),
-
-          phone: phone.trim(),
-
-          sharingId: sharingId,
-
-          roomNumber: roomNumber.trim(),
-
-          amountToPay:
-            Number(amountToPay),
-
-          amountPaid:
-            Number(amountPaid || "0"),
-
-          foodPreference,
-
-          joiningDate:
-            joiningDate.trim(),
-
-          leavingDate:
-            leavingDate.trim() || undefined,
-
-          aadhaarPhotoUri,
-        },
-      );
-
-      Alert.alert(
-        "Member Added",
-        `${name.trim()} has been added successfully.`,
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              router.replace({
-                pathname:
-                  "/(owner)/members/[listingId]",
-                params: {
-                  listingId,
-                  ownerPhone,
-                },
-              });
-            },
+          text: "OK",
+          onPress: () => {
+            router.replace({
+              pathname: "/(owner)/members/[listingId]",
+              params: {
+                listingId,
+                ownerPhone,
+              },
+            });
           },
-        ],
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
+        },
+      ]
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : isEditMode
+          ? "Failed to update member."
           : "Failed to add member.";
 
-      Alert.alert(
-        "Unable to Add Member",
-        message,
-      );
-    } finally {
-      setSaving(false);
-    }
+    Alert.alert(
+      isEditMode ? "Unable to Update Member" : "Unable to Add Member",
+      message
+    );
+  } finally {
+    setSaving(false);
   }
+}
+
 
 
   return (
@@ -353,7 +417,7 @@ export default function AddMemberScreen() {
         </Text>
 
         <Text className="mt-1 text-[25px] font-bold text-[#0F172A]">
-          Add Member
+          {isEditMode ? "Edit Member" : "Add Member"}
         </Text>
 
       </View>
@@ -740,24 +804,24 @@ export default function AddMemberScreen() {
               : "bg-[#2563EB]"
           }`}
         >
-          {saving ? (
-            <View className="flex-row items-center justify-center">
+          
+        {saving ? (
+          <View className="flex-row items-center justify-center">
+            <ActivityIndicator
+              size="small"
+              color="#FFFFFF"
+            />
 
-              <ActivityIndicator
-                size="small"
-                color="#FFFFFF"
-              />
-
-              <Text className="ml-2 text-[15px] font-bold text-white">
-                Adding Member...
-              </Text>
-
-            </View>
-          ) : (
-            <Text className="text-center text-[15px] font-bold text-white">
-              Add Member
+            <Text className="ml-2 text-[15px] font-bold text-white">
+              {isEditMode ? "Updating Member..." : "Adding Member..."}
             </Text>
-          )}
+          </View>
+        ) : (
+          <Text className="text-center text-[15px] font-bold text-white">
+            {isEditMode ? "Update Member" : "Add Member"}
+          </Text>
+        )}
+
         </Pressable>
 
       </ScrollView>

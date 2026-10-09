@@ -188,16 +188,10 @@ class ListingResponse(BaseModel):
     # LOCATION
     # --------------------------------------------------------
 
-    city: str
-
-    area: str
-
-    address: str
-
-    latitude: str | None
-
-    longitude: str | None
-
-    restrictions: str | None
+    city: str | None = None
+    area: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
     status: str

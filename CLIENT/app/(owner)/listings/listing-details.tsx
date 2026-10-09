@@ -17,6 +17,16 @@ import { API_BASE_URL } from "../../../constants/api";
 // TYPES
 // ============================================================================
 
+type ListingSharing = {
+  id: string;
+  sharing_type: string;
+  monthly_price: number;
+  total_beds: number;
+  available_beds: number;
+  filled_beds: number;
+};
+
+
 type Listing = {
   id: string;
   owner_phone: string | null;
@@ -34,7 +44,7 @@ type Listing = {
   filled_beds: number;
 
   // Could be ["1","2"] or a list of objects depending on the backend schema.
-  sharing: unknown[] | null;
+  sharing: ListingSharing[] | null;
 
   ac_type: string;
   facilities: string[] | null;
@@ -322,9 +332,18 @@ function ActionButton({
 // ============================================================================
 
 export default function ListingDetailsScreen() {
-  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  
+    const params = useLocalSearchParams<{
+      id?: string | string[];
+      listingId?: string | string[];
+    }>();
 
-  const listingId = Array.isArray(params.id) ? params.id[0] : params.id;
+    const rawId = params.listingId ?? params.id;
+
+    const listingId = Array.isArray(rawId)
+      ? rawId[0]
+      : rawId;
+
 
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -376,7 +395,10 @@ export default function ListingDetailsScreen() {
               : `Failed to load listing (${response.status}).`
           );
         }
-
+        console.log(
+  "LISTING DETAILS API RESPONSE:",
+  JSON.stringify(data, null, 2)
+);
         setListing(data as Listing);
       } catch (err: unknown) {
         const aborted = err instanceof Error && err.name === "AbortError";
@@ -406,18 +428,42 @@ export default function ListingDetailsScreen() {
   // DERIVED
   // --------------------------------------------------------------------------
 
-  const sharing = useMemo(
-    () => normalizeSharing(listing?.sharing),
-    [listing?.sharing]
-  );
+  
+const sharingDetails = useMemo(
+  () => Array.isArray(listing?.sharing) ? listing.sharing : [],
+  [listing?.sharing]
+);
 
-  const occupancy = useMemo(() => {
-    if (!listing || !listing.total_beds) return 0;
-    return Math.min(
-      100,
-      Math.max(0, Math.round((listing.filled_beds / listing.total_beds) * 100))
-    );
-  }, [listing]);
+const sharing = useMemo(
+  () => sharingDetails.map((item) => item.sharing_type),
+  [sharingDetails]
+);
+
+const totalBeds = sharingDetails.reduce(
+  (sum, item) => sum + Number(item.total_beds || 0),
+  0
+);
+
+const availableBeds = sharingDetails.reduce(
+  (sum, item) => sum + Number(item.available_beds || 0),
+  0
+);
+
+const filledBeds = sharingDetails.reduce(
+  (sum, item) => sum + Number(item.filled_beds || 0),
+  0
+);
+
+const lowestMonthlyPrice = sharingDetails.length
+  ? Math.min(
+      ...sharingDetails.map((item) => Number(item.monthly_price || 0))
+    )
+  : 0;
+
+const occupancy = totalBeds > 0
+  ? Math.min(100, Math.round((filledBeds / totalBeds) * 100))
+  : 0;
+
 
   const rules = useMemo(
     () =>
@@ -534,7 +580,7 @@ export default function ListingDetailsScreen() {
   }
 
   const status = statusStyle(listing.status);
-  const bedsFull = listing.available_beds <= 0;
+  const bedsFull = totalBeds > 0 && availableBeds <= 0;
   const foodOn = (listing.food_available ?? "").toLowerCase() === "yes";
   const facilities = Array.isArray(listing.facilities) ? listing.facilities : [];
 
@@ -703,7 +749,7 @@ export default function ListingDetailsScreen() {
                 </Text>
                 <View className="flex-row items-end">
                   <Text className="text-[32px] font-extrabold text-white">
-                    {formatINR(listing.monthly_price)}
+                    {formatINR(lowestMonthlyPrice)}
                   </Text>
                   <Text className="mb-1.5 ml-1 text-[13px] text-[#BFDBFE]">
                     / month
@@ -730,26 +776,28 @@ export default function ListingDetailsScreen() {
                 className="flex-row"
                 style={{ columnGap: 10 }}
                 >
+                
                 <StatTile
-                    label="Total"
-                    value={listing.total_beds}
-                    color="#0F172A"
-                    bg="#F1F5F9"
+                  label="Total"
+                  value={totalBeds}
+                  color="#0F172A"
+                  bg="#F1F5F9"
                 />
 
                 <StatTile
-                    label="Available"
-                    value={listing.available_beds}
-                    color={bedsFull ? "#B91C1C" : "#15803D"}
-                    bg={bedsFull ? "#FEE2E2" : "#DCFCE7"}
+                  label="Available"
+                  value={availableBeds}
+                  color={bedsFull ? "#B91C1C" : "#15803D"}
+                  bg={bedsFull ? "#FEE2E2" : "#DCFCE7"}
                 />
 
                 <StatTile
-                    label="Filled"
-                    value={listing.filled_beds}
-                    color="#1D4ED8"
-                    bg="#DBEAFE"
+                  label="Filled"
+                  value={filledBeds}
+                  color="#1D4ED8"
+                  bg="#DBEAFE"
                 />
+
                 </View>
 
             <View className="mt-4">
@@ -773,19 +821,57 @@ export default function ListingDetailsScreen() {
               </View>
             </View>
 
-            <Text className="mb-2 mt-5 text-[13px] font-bold text-[#334155]">
-              Sharing options
-            </Text>
+            
+<Text className="mb-2 mt-5 text-[13px] font-bold text-[#334155]">
+  Sharing options
+</Text>
 
-            <View className="flex-row flex-wrap">
-              {sharing.length > 0 ? (
-                sharing.map((item, index) => (
-                  <Pill key={`${item}-${index}`} text={sharingLabel(item)} />
-                ))
-              ) : (
-                <Text className="text-[13px] text-[#94A3B8]">Not provided</Text>
-              )}
-            </View>
+{sharingDetails.length > 0 ? (
+  sharingDetails.map((item) => (
+    <View
+      key={item.id || item.sharing_type}
+      className="mb-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4"
+    >
+      <View className="mb-3 flex-row items-center justify-between">
+        <Text className="text-[15px] font-extrabold text-[#1D4ED8]">
+          {sharingLabel(item.sharing_type)}
+        </Text>
+
+        <Text className="text-[15px] font-extrabold text-[#0F172A]">
+          {formatINR(item.monthly_price)}/month
+        </Text>
+      </View>
+
+      <View className="flex-row justify-between">
+        <View>
+          <Text className="text-[11px] text-[#64748B]">Total beds</Text>
+          <Text className="mt-1 text-[14px] font-bold text-[#0F172A]">
+            {item.total_beds}
+          </Text>
+        </View>
+
+        <View>
+          <Text className="text-[11px] text-[#64748B]">Available</Text>
+          <Text className="mt-1 text-[14px] font-bold text-[#15803D]">
+            {item.available_beds}
+          </Text>
+        </View>
+
+        <View>
+          <Text className="text-[11px] text-[#64748B]">Filled</Text>
+          <Text className="mt-1 text-[14px] font-bold text-[#1D4ED8]">
+            {item.filled_beds}
+          </Text>
+        </View>
+      </View>
+    </View>
+  ))
+) : (
+  <Text className="text-[13px] text-[#94A3B8]">
+    No sharing options added.
+  </Text>
+)}
+
           </Card>
 
           {/* ABOUT */}
@@ -907,6 +993,25 @@ export default function ListingDetailsScreen() {
               </Text>
             )}
           </Card>
+
+          
+        <Pressable
+          onPress={() =>
+            router.push({
+              pathname: "/(owner)/listings/create",
+              params: {
+                listingId: String(listing.id),
+                mode: "edit",
+              },
+            })
+          }
+          className="mb-3 rounded-xl border border-[#2563EB] bg-[#EFF6FF] px-4 py-4"
+        >
+          <Text className="text-center text-[15px] font-bold text-[#2563EB]">
+            ✏️ Edit Property
+          </Text>
+        </Pressable>
+
 
            {/* =====================================================
     DELETE PROPERTY

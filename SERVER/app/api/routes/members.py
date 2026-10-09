@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
+from datetime import date
 
 from app.db.database import get_db
 from app.schemas.member import (
@@ -198,24 +199,90 @@ def get_single_member(
     return member_to_response(member)
 
 
+
 @router.put(
     "/{listing_id}/members/{member_id}",
     response_model=MemberResponse,
 )
-def edit_member(
+async def edit_member(
     listing_id: str,
     member_id: str,
-    data: MemberUpdate,
+
+    owner_phone: str = Form(...),
+
+    name: str = Form(...),
+    phone: str = Form(...),
+
+    sharing_id: str = Form(...),
+    room_number: str = Form(...),
+
+    amount_to_pay: int = Form(...),
+    amount_paid: int = Form(...),
+
+    food_preference: str = Form("veg"),
+
+    joining_date: str = Form(...),
+    leaving_date: str | None = Form(None),
+
+    aadhaar_photo: UploadFile | None = File(None),
+
     db: Session = Depends(get_db),
 ):
-    member = update_member(
+    try:
+        parsed_joining_date = date.fromisoformat(joining_date)
+
+        parsed_leaving_date = (
+            date.fromisoformat(leaving_date)
+            if leaving_date
+            else None
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid date format. Use YYYY-MM-DD.",
+        )
+
+    # Build the update data expected by the service.
+    data = MemberUpdate(
+        owner_phone=owner_phone,
+        name=name,
+        phone=phone,
+        sharing_id=sharing_id,
+        room_number=room_number,
+        amount_to_pay=amount_to_pay,
+        amount_paid=amount_paid,
+        food_preference=food_preference,
+        joining_date=parsed_joining_date,
+        leaving_date=parsed_leaving_date,
+    )
+
+    aadhaar_photo_path = None
+
+    if aadhaar_photo:
+        aadhaar_photo_path = await save_aadhaar_photo(
+            upload=aadhaar_photo,
+            private_directory=PRIVATE_MEMBER_DOCUMENT_DIR,
+        )
+
+    try:
+        member = update_member(
         db=db,
         listing_id=listing_id,
         member_id=member_id,
         data=data,
     )
+    except Exception:
+        if aadhaar_photo_path:
+            try:
+                path = Path(aadhaar_photo_path)
+                if path.exists():
+                    path.unlink()
+            except OSError:
+                pass
+        raise
 
     return member_to_response(member)
+
 
 
 @router.delete(

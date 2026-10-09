@@ -5,7 +5,7 @@ from app.db.database import get_db
 from app.models.listing import Listing
 from app.models.listing_sharing import ListingSharing
 from app.schemas.listing import ListingCreate, ListingResponse
-from app.services.listing_service import create_listing
+from app.services.listing_service import (create_listing, update_listing)
 
 
 router = APIRouter(
@@ -157,6 +157,60 @@ def get_owner_listing(
         )
 
     return listing_to_response(listing)
+
+
+
+
+# ============================================================
+# UPDATE LISTING
+# PUT /api/v1/owner/listings/{listing_id}
+# ============================================================
+
+@router.put(
+    "/{listing_id}",
+    response_model=ListingResponse,
+)
+def update_owner_listing(
+    listing_id: str,
+    data: ListingCreate,
+    db: Session = Depends(get_db),
+):
+    try:
+        listing, is_duplicate = update_listing(
+            db=db,
+            listing_id=listing_id,
+            data=data,
+        )
+
+        if is_duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Another hostel/PG already exists for "
+                    "this owner at the same location and address."
+                ),
+            )
+
+        if listing is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Listing not found.",
+            )
+
+        return listing_to_response(listing)
+
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=str(exc),
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
 
 
 # ============================================================

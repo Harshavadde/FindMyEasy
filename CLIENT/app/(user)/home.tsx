@@ -2236,7 +2236,7 @@ export default function UserHome() {
         ================================================================ */}
 
         <Text className="text-[13px] font-bold text-[#2563EB]">
-          FindMyEasy
+          FindEasy
         </Text>
 
         <Text className="mt-1 text-[27px] font-extrabold text-[#0F172A]">

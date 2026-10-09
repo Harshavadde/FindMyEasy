@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./findmyeasy.db"
+    DATABASE_URL: str = "sqlite:///./findeasy.db"
 
     UPLOAD_DIR: str = "uploads"
 

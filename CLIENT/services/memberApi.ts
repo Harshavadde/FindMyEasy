@@ -215,6 +215,115 @@ export async function getMember(
 }
 
 
+
+/**
+ * Update an existing member.
+ * Uses multipart/form-data so a new Aadhaar photo is optional.
+ */
+
+export async function updateMember(
+  listingId: string,
+  memberId: string,
+  input: AddMemberInput,
+): Promise<HostelMember> {
+  const formData = new FormData();
+
+  formData.append("owner_phone", input.ownerPhone);
+  formData.append("name", input.name);
+  formData.append("phone", input.phone);
+  formData.append("sharing_id", input.sharingId);
+  formData.append("room_number", input.roomNumber);
+  formData.append("amount_to_pay", String(input.amountToPay));
+  formData.append("amount_paid", String(input.amountPaid));
+  formData.append("food_preference", input.foodPreference);
+  formData.append("joining_date", input.joiningDate);
+
+  if (input.leavingDate) {
+    formData.append("leaving_date", input.leavingDate);
+  }
+
+  if (input.aadhaarPhotoUri) {
+    const filename =
+      input.aadhaarPhotoUri.split("/").pop() ||
+      `aadhaar_${Date.now()}.jpg`;
+
+    const extension = filename.split(".").pop()?.toLowerCase();
+
+    const mimeType =
+      extension === "png"
+        ? "image/png"
+        : extension === "webp"
+          ? "image/webp"
+          : "image/jpeg";
+
+    formData.append(
+      "aadhaar_photo",
+      {
+        uri: input.aadhaarPhotoUri,
+        name: filename,
+        type: mimeType,
+      } as any,
+    );
+  }
+
+  const url =
+    `${API_BASE_URL}/api/v1/owner/listings/` +
+    `${encodeURIComponent(listingId)}/members/` +
+    `${encodeURIComponent(memberId)}` +
+    `?owner_phone=${encodeURIComponent(input.ownerPhone)}`;
+
+  const response = await fetch(url, {
+    method: "PUT",
+    body: formData,
+  });
+
+  let data: any = null;
+
+  try {
+    const responseText = await response.text();
+    data = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const detail = data?.detail;
+    let message = "Failed to update member.";
+
+    if (typeof detail === "string") {
+      message = detail;
+    } else if (Array.isArray(detail)) {
+      message = detail
+        .map((item: any) => {
+          const field = Array.isArray(item.loc)
+            ? item.loc.slice(1).join(".")
+            : "";
+
+          const reason =
+            item.msg ?? JSON.stringify(item);
+
+          return field ? `${field}: ${reason}` : reason;
+        })
+        .join("\n");
+    } else if (detail && typeof detail === "object") {
+      message = JSON.stringify(detail);
+    } else if (typeof data?.message === "string") {
+      message = data.message;
+    } else if (data) {
+      message = JSON.stringify(data);
+    } else {
+      message = `Update failed with HTTP ${response.status}.`;
+    }
+
+    throw new Error(message);
+  }
+
+  return data as HostelMember;
+}
+
+
+
+
 /**
  * Delete a member.
  */

@@ -38,7 +38,7 @@ Base.metadata.create_all(
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="FindMyEasy API",
+    title="FindEasy API",
     version="1.0.0",
 )
 
@@ -90,7 +90,7 @@ app.include_router(members_router)
 @app.get("/")
 def root():
     return {
-        "message": "FindMyEasy API is running",
+        "message": "FindEasy API is running",
     }
 
 
