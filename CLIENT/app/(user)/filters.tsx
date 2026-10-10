@@ -121,8 +121,8 @@ export default function UserFilters() {
 
       <FilterSection title="For">
         {[
-          "Men's",
-          "Women's",
+          "Boy's",
+          "Girl's",
           "Co-living",
         ].map((item) => (
           <Choice

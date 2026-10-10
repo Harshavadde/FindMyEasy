@@ -40,7 +40,7 @@ export default function Login() {
           if (role === "owner") {
             router.replace("/(owner)");
           } else {
-            router.replace("/(user)/selectyourFinding/category");
+            router.replace("/(user)/PG");
           }
         }}
       >

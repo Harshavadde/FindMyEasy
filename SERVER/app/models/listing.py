@@ -70,7 +70,7 @@ class Listing(Base):
 
     property_type = Column(String(30), nullable=False)  # "PG" | "Hostel"
 
-    gender = Column(String(30), nullable=False)  # "Men's" | "Women's" | "Co-living"
+    gender = Column(String(30), nullable=False)  # "Boy's" | "Girl's" | "Co-living"
 
     description = Column(Text, nullable=True)
 

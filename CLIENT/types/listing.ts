@@ -11,7 +11,7 @@ export type Listing = {
 
   name: string;
   property_type: "PG" | "Hostel" | string;
-  gender: "Men's" | "Women's" | "Co-living" | string;
+  gender: "Boy's" | "Girl's" | "Co-living" | string;
 
   description?: string | null;
 

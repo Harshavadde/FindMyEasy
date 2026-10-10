@@ -85,9 +85,10 @@ const cities = Object.keys(cityAreas);
  * MULTIPLE SELECTION
  */
 
+
 const pgTypes = [
-  "Boys PG",
-  "Girls PG",
+  "Boy's",
+  "Girl's",
   "Co-living",
 ];
 
@@ -177,6 +178,9 @@ function RadioButton({ selected }: { selected: boolean }) {
  */
 
 export default function PGPage() {
+
+  const [selectedPropertyType, setSelectedPropertyType] =
+  useState<"PG" | "Hostel">("PG");
   /*
    * ==========================================================
    * CITY
@@ -207,6 +211,12 @@ export default function PGPage() {
   const [selectedPGTypes, setSelectedPGTypes] =
     useState<string[]>([]);
 
+    const hostelTypes = ["Boy's ", "Girl's"];
+
+const [selectedHostelTypes, setSelectedHostelTypes] =
+  useState<string[]>([]);
+
+
   /*
    * ==========================================================
    * ROOM SHARING
@@ -224,8 +234,7 @@ export default function PGPage() {
    * ==========================================================
    */
 
-  const [selectedAcType, setSelectedAcType] =
-    useState<string | null>(null);
+  const [selectedAcTypes, setSelectedAcTypes] = useState<string[]>([]);
 
   /*
    * ==========================================================
@@ -320,16 +329,8 @@ export default function PGPage() {
     });
   };
 
-  /*
-   * ==========================================================
-   * AC / NON-AC
-   * SINGLE SELECTION
-   * ==========================================================
-   */
-
-  const selectAcType = (type: string) => {
-    setSelectedAcType(type);
-  };
+  
+ 
 
   /*
    * ==========================================================
@@ -381,32 +382,27 @@ export default function PGPage() {
    */
 
   const handleFindPGs = () => {
-    /*
-     * City is required because areas depend on city.
-     */
+  if (!selectedCity) {
+    return;
+  }
 
-    if (!selectedCity) {
-      return;
-    }
-
-    router.push({
-      pathname: "/home",
-      params: {
-        pgSearch: "true",
-
-        pgCity: selectedCity,
-
-        pgAreas: JSON.stringify(selectedAreas),
-
-        pgTypes: JSON.stringify(selectedPGTypes),
-
-        pgSharing: JSON.stringify(selectedRoomSharing),
-
-        pgAcType: selectedAcType ?? "",
-      },
-    });
-  };
-
+  router.push({
+    pathname: "/home",
+    params: {
+      pgSearch: "true",
+      propertyType: selectedPropertyType,
+      pgCity: selectedCity,
+      pgAreas: JSON.stringify(selectedAreas),
+      pgTypes: JSON.stringify(
+        selectedPropertyType === "PG"
+          ? selectedPGTypes
+          : selectedHostelTypes
+      ),
+      pgSharing: JSON.stringify(selectedRoomSharing),
+      pgAcTypes: JSON.stringify(selectedAcTypes),
+    },
+  });
+};
   /*
    * ==========================================================
    * CURRENT CITY AREAS
@@ -560,6 +556,44 @@ export default function PGPage() {
             </View>
 
           </Pressable>
+          
+{/* PROPERTY TYPE — SINGLE SELECTION */}
+<View className="mt-4 rounded-2xl border border-[#E2E8F0] bg-white p-4">
+  <Text className="text-sm text-[#64748B]">
+    Property Type
+  </Text>
+
+  <View className="mt-3 flex-row gap-3">
+    {(["PG", "Hostel"] as const).map((type) => {
+      const selected = selectedPropertyType === type;
+
+      return (
+        <Pressable
+          key={type}
+         onPress={() => {
+  setSelectedPropertyType(type);
+  setSelectedPGTypes([]);
+  setSelectedHostelTypes([]);
+}}
+          className={`flex-1 items-center rounded-xl border py-3 ${
+            selected
+              ? "border-[#2563EB] bg-[#EFF6FF]"
+              : "border-[#E2E8F0] bg-white"
+          }`}
+        >
+          <Text
+            className={`font-bold ${
+              selected ? "text-[#2563EB]" : "text-[#475569]"
+            }`}
+          >
+            {type}
+          </Text>
+        </Pressable>
+      );
+    })}
+  </View>
+</View>
+
 
           {/* =================================================
               3. PG TYPE
@@ -568,35 +602,65 @@ export default function PGPage() {
               DIRECTLY DISPLAYED
           ================================================= */}
 
-          <View className="mt-3 rounded-2xl border border-[#E2E8F0] bg-white p-4">
+          
+{/* PG TYPE / HOSTEL TYPE */}
+<View className="rounded-2xl border border-[#E2E8F0] bg-white p-4">
+  <Text className="text-sm text-[#64748B]">
+    {selectedPropertyType === "PG" ? "PG Type" : "Hostel Type"}
+  </Text>
 
-            <Text className="text-sm text-[#64748B]">
-              PG Type
-            </Text>
+  {(selectedPropertyType === "PG"
+    ? ["Boy's", "Girl's", "Co-living"]
+    : hostelTypes
+  ).map((type) => {
+    const selected =
+      selectedPropertyType === "PG"
+        ? selectedPGTypes.includes(type)
+        : selectedHostelTypes.includes(type);
 
-            {pgTypes.map((type) => {
+    return (
+      <Pressable
+        key={type}
+        onPress={() => {
+          if (selectedPropertyType === "PG") {
+            setSelectedPGTypes((current) =>
+              current.includes(type)
+                ? current.filter((item) => item !== type)
+                : [...current, type]
+            );
+          } else {
+            setSelectedHostelTypes((current) =>
+              current.includes(type)
+                ? current.filter((item) => item !== type)
+                : [...current, type]
+            );
+          }
+        }}
+        className="mt-4 flex-row items-center"
+      >
+        <View
+          className={`h-6 w-6 items-center justify-center rounded-md border ${
+            selected
+              ? "border-[#2563EB] bg-[#2563EB]"
+              : "border-[#CBD5E1] bg-white"
+          }`}
+        >
+          {selected && (
+            <MaterialCommunityIcons
+              name="check"
+              size={17}
+              color="#FFFFFF"
+            />
+          )}
+        </View>
 
-              const selected =
-                selectedPGTypes.includes(type);
-
-              return (
-                <Pressable
-                  key={type}
-                  onPress={() => togglePGType(type)}
-                  className="mt-4 flex-row items-center"
-                >
-
-                  <Checkbox checked={selected} />
-
-                  <Text className="ml-3 text-base font-semibold text-[#0F172A]">
-                    {type}
-                  </Text>
-
-                </Pressable>
-              );
-            })}
-
-          </View>
+        <Text className="ml-3 text-base font-semibold text-[#0F172A]">
+          {type}
+        </Text>
+      </Pressable>
+    );
+  })}
+</View>
 
           {/* =================================================
               4. ROOM SHARING
@@ -656,43 +720,42 @@ export default function PGPage() {
           Food Habit will not be used for PG matching.
           */}
 
-          {/* =================================================
-              7. AC / NON-AC
-              SINGLE SELECTION
-              RADIO BUTTON
-          ================================================= */}
+          
+{/* =================================================
+    7. AC / NON-AC
+    MULTIPLE SELECTION
+================================================= */}
 
-          <View className="mt-3 rounded-2xl border border-[#E2E8F0] bg-white p-4">
+<View className="mt-3 rounded-2xl border border-[#E2E8F0] bg-white p-4">
+  <Text className="text-sm text-[#64748B]">
+    AC / Non-AC
+  </Text>
 
-            <Text className="text-sm text-[#64748B]">
-              AC / Non-AC
-            </Text>
+  {acOptions.map((option) => {
+    const selected = selectedAcTypes.includes(option);
 
-            {acOptions.map((option) => {
+    return (
+      <Pressable
+        key={option}
+        onPress={() => {
+          setSelectedAcTypes((current) =>
+            current.includes(option)
+              ? current.filter((item) => item !== option)
+              : [...current, option]
+          );
+        }}
+        className="mt-4 flex-row items-center"
+      >
+        <Checkbox checked={selected} />
 
-              const selected =
-                selectedAcType === option;
+        <Text className="ml-3 text-base font-semibold text-[#0F172A]">
+          {option}
+        </Text>
+      </Pressable>
+    );
+  })}
+</View>
 
-              return (
-                <Pressable
-                  key={option}
-                  onPress={() =>
-                    selectAcType(option)
-                  }
-                  className="mt-4 flex-row items-center"
-                >
-
-                  <RadioButton selected={selected} />
-
-                  <Text className="ml-3 text-base font-semibold text-[#0F172A]">
-                    {option}
-                  </Text>
-
-                </Pressable>
-              );
-            })}
-
-          </View>
 
           {/* =================================================
               8. FIND PGs BUTTON
@@ -709,7 +772,7 @@ export default function PGPage() {
           >
 
             <Text className="text-base font-bold text-white">
-              Find PGs
+             {selectedPropertyType === "PG" ? "Find PGs" : "Find Hostels"}
             </Text>
 
           </Pressable>

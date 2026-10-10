@@ -55,8 +55,8 @@ type NearbyMode =
 
 type GenderFilter =
   | "All"
-  | "Men's"
-  | "Women's"
+  | "Boy's"
+  | "Girl's"
   | "Co-living";
 
 type SortMode =
@@ -122,8 +122,8 @@ const RADIUS_OPTIONS = [
 
 const GENDER_FILTERS: GenderFilter[] = [
   "All",
-  "Men's",
-  "Women's",
+  "Boy's",
+  "Girl's",
   "Co-living",
 ];
 
@@ -392,14 +392,14 @@ function formatDistance(
  *
  * PG.tsx uses:
  *
- * Boys PG
- * Girls PG
+ * Boy's
+ * Girl's
  * Co-living
  *
  * Existing Listing data uses:
  *
- * Men's
- * Women's
+ * Boy's
+ * Girl's
  * Co-living
  *
  * Therefore we translate the user selection
@@ -430,32 +430,32 @@ function matchesPGType(
         normalizeText(type);
 
       /*
-       * Boys PG
-       * matches Men's / Men / Boys
+       * Boy's
+       * matches Boy's / Men / Boys
        */
 
       if (
         selectedType ===
-        "boys pg"
+        "Boy's"
       ) {
         return (
-          gender === "men's" ||
+          gender === "Boy's" ||
           gender === "men" ||
           gender === "boys"
         );
       }
 
       /*
-       * Girls PG
-       * matches Women's / Women / Girls
+       * Girl's
+       * matches Girl's / Women / Girls
        */
 
       if (
         selectedType ===
-        "girls pg"
+        "Girl's"
       ) {
         return (
-          gender === "women's" ||
+          gender === "Girl's" ||
           gender === "women" ||
           gender === "girls"
         );
@@ -2602,8 +2602,8 @@ export default function UserHome() {
          *
          * PG FILTER PAGE already has:
          *
-         * Boys PG
-         * Girls PG
+         * Boy's
+         * Girl's
          * Co-living
          *
          * Therefore this Home filter is hidden during PG search.

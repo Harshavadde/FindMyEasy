@@ -20,8 +20,6 @@ import {
 
   Pressable,
 
-  SafeAreaView,
-
   ScrollView,
 
   Text,
@@ -31,6 +29,7 @@ import {
   View,
 
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 
 
@@ -80,7 +79,7 @@ import {
 
 type PropertyType = "PG" | "Hostel";
 
-type GenderType = "Men's" | "Women's" | "Co-living";
+type GenderType = "Boy's" | "Girl's" | "Co-living";
 
 type ACType = "AC" | "Non-AC";
 
@@ -100,7 +99,7 @@ type SharingPricing = {
 
 
 
-const GENDER_OPTIONS: GenderType[] = ["Men's", "Women's", "Co-living"];
+const GENDER_OPTIONS: GenderType[] = ["Boy's", "Girl's", "Co-living"];
 
 const FOOD_TYPES: FoodType[] = ["Veg", "Non-Veg", "Both"];
 
@@ -266,7 +265,7 @@ const isEditMode = mode === "edit" && Boolean(listingId);
 
   const [propertyType, setPropertyType] = useState<PropertyType>("PG");
 
-  const [gender, setGender] = useState<GenderType>("Men's");
+  const [gender, setGender] = useState<GenderType>("Boy's");
 
   const [description, setDescription] = useState("");
 
@@ -405,7 +404,7 @@ const isEditMode = mode === "edit" && Boolean(listingId);
         setPropertyName(data.name ?? "");
         setOwnerPhone(data.owner_phone ?? "");
         setPropertyType(data.property_type ?? "PG");
-        setGender(data.gender ?? "Men's");
+        setGender(data.gender ?? "Boy's");
         setDescription(data.description ?? "");
         setSecurityDeposit(
           data.security_deposit != null
@@ -1479,7 +1478,7 @@ const isEditMode = mode === "edit" && Boolean(listingId);
 
               onChangeText={setPropertyName}
 
-              placeholder="e.g. Sri Sai Boys PG"
+              placeholder="e.g. Sri Sai Boy's"
 
             />
 

@@ -3,11 +3,12 @@ import {
   Alert,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   Text,
   View,
 } from "react-native";
+
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -373,8 +374,10 @@ export default function OwnerDashboard() {
   // ============================================================
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F5F9FD]">
-      <View className="flex-1">
+   <SafeAreaView
+  style={{ flex: 1, backgroundColor: "#F5F9FD" }}
+>
+  <View style={{ flex: 1 }}>
 
         {/* HEADER */}
         <View className="px-5 pb-4 pt-5">
@@ -415,18 +418,19 @@ export default function OwnerDashboard() {
 
         {/* CONTENT */}
         <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingHorizontal: 20,
-          paddingBottom: 110,
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => loadListings(true)}
-          />
-        }
-      >
+  style={{ flex: 1 }}
+  showsVerticalScrollIndicator={false}
+  contentContainerStyle={{
+    paddingHorizontal: 20,
+    paddingBottom: 110,
+  }}
+  refreshControl={
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={() => loadListings(true)}
+    />
+  }
+>
 
           {/* QUICK STATS */}
 
@@ -617,14 +621,18 @@ export default function OwnerDashboard() {
 
         {/* BOTTOM NAVIGATION */}
 
-        <View
-          className="absolute bottom-0 left-0 right-0 bg-white"
-          style={{
-            borderTopWidth: 1,
-            borderTopColor: "#E8EEF5",
-            paddingBottom: 10,
-          }}
-        >
+       <View
+  style={{
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#E8EEF5",
+    paddingBottom: 8,
+  }}
+>
 
           <View className="h-[68px] flex-row items-center justify-around">
 

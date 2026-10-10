@@ -1,14 +1,17 @@
 import { useState } from "react";
+import { API_BASE_URL } from "../../../constants/api";
 import {
   ActivityIndicator,
   Alert,
   Image,
   Pressable,
-  SafeAreaView,
+ 
   ScrollView,
   Text,
   View,
 } from "react-native";
+
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -50,7 +53,7 @@ type UploadResponse = {
    CONFIG
 ========================================================= */
 
-const API_BASE_URL = "http://192.168.0.9:8000";
+
 
 /* =========================================================
    IMAGE SECTIONS

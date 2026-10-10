@@ -997,14 +997,14 @@ const occupancy = totalBeds > 0
           
         <Pressable
           onPress={() =>
-            router.push({
-              pathname: "/(owner)/listings/create",
-              params: {
-                listingId: String(listing.id),
-                mode: "edit",
-              },
-            })
-          }
+  router.push({
+    pathname: "/(owner)/listings/create",
+    params: {
+      listingId: String(listing.id),
+      mode: "edit",
+    },
+  })
+}
           className="mb-3 rounded-xl border border-[#2563EB] bg-[#EFF6FF] px-4 py-4"
         >
           <Text className="text-center text-[15px] font-bold text-[#2563EB]">

@@ -5,12 +5,12 @@ import {
   Alert,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { router, useFocusEffect } from "expo-router";
 
@@ -407,6 +407,7 @@ export default function MyListings() {
   return (
     <SafeAreaView className="flex-1 bg-[#F5F9FD]">
       <View className="flex-1">
+        
         {/* HEADER */}
 
         <View className="border-b border-[#E8EEF5] bg-[#F5F9FD] px-5 pb-4 pt-4">
