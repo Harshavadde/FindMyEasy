@@ -282,8 +282,8 @@ export default function MyListings() {
       const message = aborted
         ? "The server took too long to respond."
         : network
-        ? `Cannot reach the server at ${API_BASE_URL}. Check that FastAPI is running and your phone is on the same Wi-Fi.`
-        : getErrorMessage(err, "Something went wrong while loading your properties.");
+          ? `Cannot reach the server at ${API_BASE_URL}. Check that FastAPI is running and your phone is on the same Wi-Fi.`
+          : getErrorMessage(err, "Something went wrong while loading your properties.");
 
       console.warn("Failed to load listings:", message);
 
@@ -407,7 +407,7 @@ export default function MyListings() {
   return (
     <SafeAreaView className="flex-1 bg-[#F5F9FD]">
       <View className="flex-1">
-        
+
         {/* HEADER */}
 
         <View className="border-b border-[#E8EEF5] bg-[#F5F9FD] px-5 pb-4 pt-4">
@@ -634,9 +634,8 @@ export default function MyListings() {
                 <Text className="text-[12px] font-bold text-[#64748B]">
                   {hasFilters
                     ? `${filteredListings.length} of ${listings.length}`
-                    : `${listings.length} ${
-                        listings.length === 1 ? "property" : "properties"
-                      }`}
+                    : `${listings.length} ${listings.length === 1 ? "property" : "properties"
+                    }`}
                 </Text>
               </View>
 
@@ -791,9 +790,8 @@ export default function MyListings() {
                             {sharing.map((item, index) => (
                               <View
                                 key={item.id ?? `${item.sharing_type}-${index}`}
-                                className={`flex-row items-center justify-between ${
-                                  index < sharing.length - 1 ? "mb-2" : ""
-                                }`}
+                                className={`flex-row items-center justify-between ${index < sharing.length - 1 ? "mb-2" : ""
+                                  }`}
                               >
                                 <View className="flex-1">
                                   <Text className="text-[13px] font-bold text-[#0F172A]">

@@ -211,7 +211,7 @@ export default function PGPage() {
   const [selectedPGTypes, setSelectedPGTypes] =
     useState<string[]>([]);
 
-    const hostelTypes = ["Boy's ", "Girl's"];
+    const hostelTypes = ["Boy's", "Girl's"];
 
 const [selectedHostelTypes, setSelectedHostelTypes] =
   useState<string[]>([]);

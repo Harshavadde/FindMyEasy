@@ -20,7 +20,7 @@ import {
   getPublicListing,
 } from "../../../services/api";
 
-import type { Listing } from "../../../types/listing";
+import type { Listing, ListingSharing } from "../../../types/listing";
 
 export default function UserListingDetails() {
   const params =
@@ -62,7 +62,7 @@ export default function UserListingDetails() {
       Alert.alert(
         "Unable to load property",
         error?.message ||
-          "This property could not be loaded.",
+        "This property could not be loaded.",
         [
           {
             text: "Go Back",
@@ -159,12 +159,12 @@ export default function UserListingDetails() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: 120,
+          paddingBottom: 10,
         }}
       >
         <View className="bg-white">
           {listing.images?.length > 0 &&
-          listing.images[0]?.url ? (
+            listing.images[0]?.url ? (
             <Image
               source={{
                 uri: listing.images[0].url,
@@ -226,31 +226,85 @@ export default function UserListingDetails() {
             </Text>
           </View>
 
-          <View className="mt-4 rounded-[18px] bg-white p-4">
-            <Text className="text-[16px] font-extrabold text-[#0F172A]">
-              Availability
-            </Text>
 
-            <View className="mt-4 flex-row">
-              <InfoItem
-                label="Available"
-                value={`${listing.available_beds}`}
-              />
+          {/* BEDS AND SHARING */}
+          <Section title="Beds & Availability">
+            {(() => {
+              const sharingOptions: ListingSharing[] = listing.sharing ?? [];
 
-              <InfoItem
-                label="Total beds"
-                value={`${listing.total_beds}`}
-              />
+              const totalBeds = sharingOptions.reduce<number>(
+                (sum, item) => sum + Number(item.total_beds || 0),
+                0
+              );
 
-              <InfoItem
-                label="Sharing"
-                value={
-                  listing.sharing.join(", ") ||
-                  "-"
-                }
-              />
-            </View>
-          </View>
+              const availableBeds = sharingOptions.reduce<number>(
+                (sum, item) => sum + Number(item.available_beds || 0),
+                0
+              );
+
+              const filledBeds = sharingOptions.reduce<number>(
+                (sum, item) => sum + Number(item.filled_beds || 0),
+                0
+              );
+              const occupancy = totalBeds
+                ? Math.round((filledBeds / totalBeds) * 100)
+                : 0;
+
+              return (
+                <>
+                  <View className="flex-row justify-between">
+                    <InfoItem label="Total beds" value={String(totalBeds)} />
+                    <InfoItem label="Available" value={String(availableBeds)} />
+                    <InfoItem label="Filled" value={String(filledBeds)} />
+                  </View>
+
+                  <Text className="mt-4 text-[12px] font-bold text-[#475569]">
+                    Occupancy: {occupancy}% filled
+                  </Text>
+
+                  <View className="mt-2 h-2 overflow-hidden rounded-full bg-[#E2E8F0]">
+                    <View
+                      className="h-2 rounded-full bg-[#2563EB]"
+                      style={{ width: `${occupancy}%` }}
+                    />
+                  </View>
+
+                  <Text className="mb-3 mt-5 text-[14px] font-extrabold text-[#0F172A]">
+                    Sharing options
+                  </Text>
+
+                  {sharingOptions.length ? (
+                   sharingOptions.map((item: ListingSharing) => (
+                      <View
+                        key={item.id || item.sharing_type}
+                        className="mb-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4"
+                      >
+                        <View className="mb-3 flex-row justify-between">
+                          <Text className="font-extrabold text-[#2563EB]">
+                            {item.sharing_type} Sharing
+                          </Text>
+                          <Text className="font-extrabold text-[#0F172A]">
+                            ₹{Number(item.monthly_price).toLocaleString("en-IN")}/month
+                          </Text>
+                        </View>
+
+                        <View className="flex-row justify-between">
+                          <InfoItem label="Total beds" value={String(item.total_beds)} />
+                          <InfoItem label="Available" value={String(item.available_beds)} />
+                          <InfoItem label="Filled" value={String(item.filled_beds)} />
+                        </View>
+                      </View>
+                    ))
+                  ) : (
+                    <Text className="text-[13px] text-[#64748B]">
+                      Sharing details are not available.
+                    </Text>
+                  )}
+                </>
+              );
+            })()}
+          </Section>
+
 
           {listing.description ? (
             <Section
@@ -286,11 +340,11 @@ export default function UserListingDetails() {
             />
           </Section>
 
-          {listing.facilities.length > 0 && (
+          {(listing.facilities ?? []).length > 0 && (
             <Section title="Facilities">
               <View className="flex-row flex-wrap">
-                {listing.facilities.map(
-                  (facility) => (
+                {(listing.facilities ?? []).map(
+                  (facility: string) => (
                     <View
                       key={facility}
                       className="mb-2 mr-2 rounded-full bg-[#EFF6FF] px-3 py-2"
@@ -305,32 +359,47 @@ export default function UserListingDetails() {
             </Section>
           )}
 
-          {listing.food_available === "Yes" && (
-            <Section title="Food Timings">
-              <DetailRow
-                label="Breakfast"
-                value={
-                  listing.breakfast_time ||
-                  "-"
-                }
-              />
 
-              <DetailRow
-                label="Lunch"
-                value={
-                  listing.lunch_time || "-"
-                }
-              />
+          {/* FOOD AND MEAL TIMINGS */}
+          <Section title="Food & Meal Timings">
+            <DetailRow
+              label="Food available"
+              value={listing.food_available || "Not provided"}
+            />
 
+            {listing.food_type ? (
+              <DetailRow label="Food type" value={listing.food_type} />
+            ) : null}
+
+            {[
+              {
+                label: "Breakfast",
+                start: listing.breakfast_start_time,
+                end: listing.breakfast_end_time,
+              },
+              {
+                label: "Lunch",
+                start: listing.lunch_start_time,
+                end: listing.lunch_end_time,
+              },
+              {
+                label: "Dinner",
+                start: listing.dinner_start_time,
+                end: listing.dinner_end_time,
+              },
+            ].map((meal) => (
               <DetailRow
-                label="Dinner"
+                key={meal.label}
+                label={meal.label}
                 value={
-                  listing.dinner_time ||
-                  "-"
+                  meal.start && meal.end
+                    ? `${meal.start} - ${meal.end}`
+                    : meal.start || meal.end || "Not set"
                 }
               />
-            </Section>
-          )}
+            ))}
+          </Section>
+
 
           {listing.restrictions ? (
             <Section title="Rules & Restrictions">
@@ -340,13 +409,48 @@ export default function UserListingDetails() {
             </Section>
           ) : null}
 
+
+          {/* OWNER CONTACT */}
+          <Section title="Owner Contact">
+            {listing.owner_phone ? (
+              <>
+                <Text className="mb-4 text-[16px] font-extrabold text-[#0F172A]">
+                  {listing.owner_phone}
+                </Text>
+
+                <View className="flex-row">
+                  <Pressable
+                    onPress={callOwner}
+                    className="mr-2 flex-1 items-center rounded-[14px] bg-[#16A34A] py-3.5"
+                  >
+                    <Text className="font-extrabold text-white">📞 Call</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={whatsappOwner}
+                    className="ml-2 flex-1 items-center rounded-[14px] bg-[#DCFCE7] py-3.5"
+                  >
+                    <Text className="font-extrabold text-[#15803D]">
+                      WhatsApp
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <Text className="text-[13px] text-[#64748B]">
+                Owner contact information is not available.
+              </Text>
+            )}
+          </Section>
+
+
           <Section title="Location">
             <Text className="text-[13px] leading-6 text-[#475569]">
               {listing.address}
             </Text>
 
             {listing.latitude &&
-            listing.longitude ? (
+              listing.longitude ? (
               <Text className="mt-2 text-[11px] text-[#64748B]">
                 {listing.latitude},{" "}
                 {listing.longitude}
@@ -365,7 +469,7 @@ export default function UserListingDetails() {
         </View>
       </ScrollView>
 
-      <View className="absolute bottom-0 left-0 right-0 flex-row border-t border-[#E2E8F0] bg-white px-5 pb-7 pt-4">
+      {/* <View className="absolute bottom-0 left-0 right-0 flex-row border-t border-[#E2E8F0] bg-white px-5 pb-7 pt-4">
         <Pressable
           onPress={callOwner}
           className="mr-2 flex-1 items-center justify-center rounded-[15px] bg-[#16A34A] py-4"
@@ -383,7 +487,7 @@ export default function UserListingDetails() {
             WhatsApp
           </Text>
         </Pressable>
-      </View>
+      </View> */}
     </View>
   );
 }

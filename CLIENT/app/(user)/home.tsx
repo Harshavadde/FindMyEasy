@@ -100,11 +100,12 @@ type ResultItem = {
  */
 
 type PgSearchFilters = {
+  propertyType: string;
   city: string;
   areas: string[];
   types: string[];
   sharing: string[];
-  acType: string;
+  acTypes: string[];
 };
 
 /*
@@ -131,19 +132,19 @@ const SORT_OPTIONS: {
   value: SortMode;
   label: string;
 }[] = [
-  {
-    value: "recommended",
-    label: "Recommended",
-  },
-  {
-    value: "price_low",
-    label: "Price: Low to High",
-  },
-  {
-    value: "price_high",
-    label: "Price: High to Low",
-  },
-];
+    {
+      value: "recommended",
+      label: "Recommended",
+    },
+    {
+      value: "price_low",
+      label: "Price: Low to High",
+    },
+    {
+      value: "price_high",
+      label: "Price: High to Low",
+    },
+  ];
 
 const PLACE_SHORTCUTS = [
   {
@@ -353,8 +354,8 @@ function getDistanceKm(
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.sin(dLon / 2) ** 2 *
-      Math.cos(lat1) *
-      Math.cos(lat2);
+    Math.cos(lat1) *
+    Math.cos(lat2);
 
   return (
     2 *
@@ -592,25 +593,17 @@ function matchesRoomSharing(
 
 function matchesAcType(
   listingAcType: string,
-  selectedAcType: string
+  selectedAcTypes: string[]
 ): boolean {
-  /*
-   * No AC filter selected.
-   *
-   * Therefore allow both AC and Non-AC.
-   */
-
-  if (!selectedAcType) {
+  // No AC option selected means allow both AC and Non-AC.
+  if (selectedAcTypes.length === 0) {
     return true;
   }
 
-  return (
-    normalizeText(
-      listingAcType
-    ) ===
-    normalizeText(
-      selectedAcType
-    )
+  // Match any selected AC option.
+  return selectedAcTypes.some(
+    (selectedType) =>
+      normalizeText(listingAcType) === normalizeText(selectedType)
   );
 }
 
@@ -776,20 +769,21 @@ export default function UserHome() {
 
   const {
     pgSearch,
+    propertyType,
     pgCity,
     pgAreas,
     pgTypes,
     pgSharing,
-    pgAcType,
-  } =
-    useLocalSearchParams<{
-      pgSearch?: string;
-      pgCity?: string;
-      pgAreas?: string;
-      pgTypes?: string;
-      pgSharing?: string;
-      pgAcType?: string;
-    }>();
+    pgAcTypes,
+  } = useLocalSearchParams<{
+    pgSearch?: string;
+    propertyType?: string;
+    pgCity?: string;
+    pgAreas?: string;
+    pgTypes?: string;
+    pgSharing?: string;
+    pgAcTypes?: string;
+  }>();
 
   /*
    * ==========================================================================
@@ -961,46 +955,29 @@ export default function UserHome() {
               ): item is string =>
                 typeof item ===
                 "string"
-              );
+            );
           } catch {
             return [];
           }
         };
 
         return {
-          city: String(
-            pgCity
-          ),
-
-          areas:
-            parseArray(
-              pgAreas
-            ),
-
-          types:
-            parseArray(
-              pgTypes
-            ),
-
-          sharing:
-            parseArray(
-              pgSharing
-            ),
-
-          acType: pgAcType
-            ? String(
-                pgAcType
-              )
-            : "",
+          propertyType: String(propertyType ?? "PG"),
+          city: String(pgCity),
+          areas: parseArray(pgAreas),
+          types: parseArray(pgTypes),
+          sharing: parseArray(pgSharing),
+          acTypes: parseArray(pgAcTypes),
         };
       },
       [
         pgSearch,
+        propertyType,
         pgCity,
         pgAreas,
         pgTypes,
         pgSharing,
-        pgAcType,
+        pgAcTypes,
       ]
     );
 
@@ -1031,7 +1008,7 @@ export default function UserHome() {
           setListings(data);
 
         } catch (
-          error: unknown
+        error: unknown
         ) {
 
           console.warn(
@@ -1191,7 +1168,7 @@ export default function UserHome() {
         };
 
       } catch (
-        error: unknown
+      error: unknown
       ) {
 
         console.warn(
@@ -1334,18 +1311,18 @@ export default function UserHome() {
         const url =
           location
             ? `https://www.google.com/maps/search/${encodeURIComponent(
-                placeType
-              )}/@${location.latitude},${location.longitude},14z`
+              placeType
+            )}/@${location.latitude},${location.longitude},14z`
             : `https://www.google.com/maps/search/${encodeURIComponent(
-                `${placeType} near me`
-              )}`;
+              `${placeType} near me`
+            )}`;
 
         await Linking.openURL(
           url
         );
 
       } catch (
-        error: unknown
+      error: unknown
       ) {
 
         console.warn(
@@ -1546,7 +1523,7 @@ export default function UserHome() {
           const area =
             String(
               listing.area ??
-                ""
+              ""
             ).trim();
 
           const key =
@@ -1612,7 +1589,7 @@ export default function UserHome() {
           const city =
             String(
               listing.city ??
-                ""
+              ""
             ).trim();
 
           const key =
@@ -1692,7 +1669,7 @@ export default function UserHome() {
 
       if (
         suggestion.type ===
-          "property" &&
+        "property" &&
         suggestion.listing
       ) {
 
@@ -1764,7 +1741,7 @@ export default function UserHome() {
 
         if (
           nearbyMode ===
-            "nearby" &&
+          "nearby" &&
           currentCoordinates
         ) {
 
@@ -1869,7 +1846,7 @@ export default function UserHome() {
         if (
           !pgFilters &&
           genderFilter !==
-            "All"
+          "All"
         ) {
 
           const wanted =
@@ -1901,6 +1878,14 @@ export default function UserHome() {
           items =
             items.filter(
               ({ listing }) => {
+
+                const propertyTypeMatches =
+                  normalizeText(listing.property_type) ===
+                  normalizeText(pgFilters.propertyType);
+
+                if (!propertyTypeMatches) {
+                  return false;
+                }
 
                 /*
                  * ------------------------------------------------------
@@ -2003,17 +1988,10 @@ export default function UserHome() {
                  * ------------------------------------------------------
                  */
 
-                const acMatches =
-                  matchesAcType(
-                    String(
-                      readField(
-                        listing,
-                        "ac_type"
-                      ) ?? ""
-                    ),
-                    pgFilters.acType
-                  );
-
+                const acMatches = matchesAcType(
+                  String(readField(listing, "ac_type") ?? ""),
+                  pgFilters.acTypes
+                );
                 if (
                   !acMatches
                 ) {
@@ -2040,14 +2018,14 @@ export default function UserHome() {
 
         if (
           sortMode ===
-            "price_low" ||
+          "price_low" ||
           sortMode ===
-            "price_high"
+          "price_high"
         ) {
 
           const direction =
             sortMode ===
-            "price_low"
+              "price_low"
               ? 1
               : -1;
 
@@ -2170,9 +2148,9 @@ export default function UserHome() {
     hasSearch ||
     isNearby ||
     genderFilter !==
-      "All" ||
+    "All" ||
     sortMode !==
-      "recommended";
+    "recommended";
 
   /*
    * RESULTS TITLE
@@ -2182,10 +2160,10 @@ export default function UserHome() {
     isPGSearch
       ? "PG Results"
       : isNearby
-      ? "Nearby Properties"
-      : hasSearch
-      ? "Search Results"
-      : "All Properties";
+        ? "Nearby Properties"
+        : hasSearch
+          ? "Search Results"
+          : "All Properties";
 
   /*
    * RESULTS SUBTITLE
@@ -2195,10 +2173,10 @@ export default function UserHome() {
     isPGSearch
       ? `PGs matching your selected preferences`
       : isNearby
-      ? `PGs and hostels within ${radiusKm} km`
-      : hasSearch
-      ? `Results for "${searchText.trim()}"`
-      : "Properties from all owners";
+        ? `PGs and hostels within ${radiusKm} km`
+        : hasSearch
+          ? `Results for "${searchText.trim()}"`
+          : "Properties from all owners";
 
   /*
    * ==========================================================================
@@ -2284,7 +2262,7 @@ export default function UserHome() {
             <Text className="mt-2 text-[11px] leading-5 text-[#64748B]">
 
               {pgFilters &&
-              pgFilters.areas.length >
+                pgFilters.areas.length >
                 0
                 ? `Areas: ${pgFilters.areas.join(", ")}`
                 : "All areas in selected city"}
@@ -2299,11 +2277,10 @@ export default function UserHome() {
         ================================================================ */}
 
         <View
-          className={`mt-5 flex-row items-center rounded-[18px] bg-white px-4 ${
-            searchFocused
-              ? "border-2 border-[#2563EB]"
-              : "border border-[#E2E8F0]"
-          }`}
+          className={`mt-5 flex-row items-center rounded-[18px] bg-white px-4 ${searchFocused
+            ? "border-2 border-[#2563EB]"
+            : "border border-[#E2E8F0]"
+            }`}
           style={{
             minHeight: 56,
             shadowColor:
@@ -2353,18 +2330,18 @@ export default function UserHome() {
 
           {searchText.length >
             0 && (
-            <Pressable
-              onPress={
-                handleClearSearch
-              }
-              className="ml-2 h-8 w-8 items-center justify-center rounded-full bg-[#F1F5F9]"
-              hitSlop={8}
-            >
-              <Text className="text-[16px] font-bold text-[#64748B]">
-                ×
-              </Text>
-            </Pressable>
-          )}
+              <Pressable
+                onPress={
+                  handleClearSearch
+                }
+                className="ml-2 h-8 w-8 items-center justify-center rounded-full bg-[#F1F5F9]"
+                hitSlop={8}
+              >
+                <Text className="text-[16px] font-bold text-[#64748B]">
+                  ×
+                </Text>
+              </Pressable>
+            )}
 
         </View>
 
@@ -2389,7 +2366,7 @@ export default function UserHome() {
           >
 
             {suggestions.length >
-            0 ? (
+              0 ? (
               suggestions.map(
                 (
                   suggestion,
@@ -2404,13 +2381,12 @@ export default function UserHome() {
                         suggestion
                       )
                     }
-                    className={`flex-row items-center px-4 py-3 ${
-                      index !==
+                    className={`flex-row items-center px-4 py-3 ${index !==
                       suggestions.length -
-                        1
-                        ? "border-b border-[#F1F5F9]"
-                        : ""
-                    }`}
+                      1
+                      ? "border-b border-[#F1F5F9]"
+                      : ""
+                      }`}
                     style={({
                       pressed,
                     }) => ({
@@ -2712,8 +2688,8 @@ export default function UserHome() {
             {isPGSearch
               ? "PGs match your selected preferences"
               : isNearby
-              ? `PGs & hostels within ${radiusKm} km`
-              : "PGs & hostels available right now"}
+                ? `PGs & hostels within ${radiusKm} km`
+                : "PGs & hostels available right now"}
 
           </Text>
 
@@ -2822,8 +2798,8 @@ export default function UserHome() {
                 {isPGSearch
                   ? "🏠"
                   : isNearby
-                  ? "📍"
-                  : "🔍"}
+                    ? "📍"
+                    : "🔍"}
               </Text>
 
               <Text className="mt-4 text-center text-[17px] font-extrabold text-[#0F172A]">
@@ -2831,8 +2807,8 @@ export default function UserHome() {
                 {isPGSearch
                   ? "No matching PGs found"
                   : isNearby
-                  ? "No nearby properties found"
-                  : "No properties found"}
+                    ? "No nearby properties found"
+                    : "No properties found"}
 
               </Text>
 
@@ -2841,8 +2817,8 @@ export default function UserHome() {
                 {isPGSearch
                   ? "No PG matches all of the selected preferences. Try changing the area, PG type, room sharing, or AC preference."
                   : isNearby
-                  ? `No PGs or hostels with valid location data were found within ${radiusKm} km. Try a larger radius.`
-                  : "Try another PG name, area or city, or change your filters."}
+                    ? `No PGs or hostels with valid location data were found within ${radiusKm} km. Try a larger radius.`
+                    : "Try another PG name, area or city, or change your filters."}
 
               </Text>
 
@@ -2885,13 +2861,13 @@ export default function UserHome() {
 
                   {distance !==
                     null && (
-                    <Text className="mb-1.5 ml-1 text-[11px] font-bold text-[#2563EB]">
-                      📍{" "}
-                      {formatDistance(
-                        distance
-                      )}
-                    </Text>
-                  )}
+                      <Text className="mb-1.5 ml-1 text-[11px] font-bold text-[#2563EB]">
+                        📍{" "}
+                        {formatDistance(
+                          distance
+                        )}
+                      </Text>
+                    )}
 
                   <ListingCard
                     listing={
