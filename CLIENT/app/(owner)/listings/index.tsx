@@ -3,6 +3,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -68,6 +69,13 @@ type Listing = {
   restrictions: string | null;
 
   status: string;
+
+  images?: {
+  id: string;
+  image_url: string;
+  image_type: string;
+}[];
+
 };
 
 type LoadMode = "initial" | "refresh" | "silent";
@@ -256,6 +264,7 @@ export default function MyListings() {
       });
 
       const raw = await response.text();
+      console.log("LISTINGS API RESPONSE:", raw);
 
       let data: any = null;
       try {
@@ -272,7 +281,24 @@ export default function MyListings() {
         );
       }
 
-      setListings(Array.isArray(data) ? data : []);
+      const listingData = Array.isArray(data) ? data : [];
+
+      console.log(
+        "LISTING IMAGES FROM API:",
+        JSON.stringify(
+          listingData.map((item: Listing) => ({
+            id: item.id,
+            name: item.name,
+            images: item.images,
+          })),
+          null,
+          2
+        )
+      );
+
+      setListings(listingData);
+
+
       setError(null);
       hasLoadedRef.current = true;
     } catch (err: unknown) {
@@ -693,8 +719,32 @@ export default function MyListings() {
                           })}
                         >
                           <View className="flex-row">
-                            <View className="h-[104px] w-[104px] items-center justify-center rounded-[20px] bg-[#EAF7F5]">
-                              <Text className="text-[48px]">🏠</Text>
+                            <View className="h-[104px] w-[104px] overflow-hidden items-center justify-center rounded-[20px] bg-[#EAF7F5]">
+                              {(() => {
+                                const coverImage =
+                                  listing.images?.find(
+                                    (image) => image.image_type === "COVER"
+                                  ) ??
+                                  listing.images?.find(
+                                    (image) => image.image_type === "PROPERTY"
+                                  );
+
+                                const imageUrl = coverImage?.image_url
+                                  ? coverImage.image_url.startsWith("http")
+                                    ? coverImage.image_url
+                                    : `${API_BASE_URL}${coverImage.image_url.startsWith("/") ? "" : "/"}${coverImage.image_url}`
+                                  : null;
+
+                                return imageUrl ? (
+                                  <Image
+                                    source={{ uri: imageUrl }}
+                                    className="h-full w-full"
+                                    resizeMode="cover"
+                                  />
+                                ) : (
+                                  <Text className="text-[48px]">🏠</Text>
+                                );
+                              })()}
                             </View>
 
                             <View className="ml-4 flex-1">
@@ -821,7 +871,12 @@ export default function MyListings() {
 
                         {/* DRAFT HINT */}
 
-                        {isDraft && (
+                        {isDraft &&
+                        !listing.images?.some(
+                          (image) =>
+                            image.image_type === "COVER" ||
+                            image.image_type === "PROPERTY"
+                        ) && (
                           <View className="mt-4 flex-row items-center rounded-[16px] bg-[#FFFBEB] p-3">
                             <Text className="mr-2 text-[18px]">📷</Text>
 

@@ -6,6 +6,7 @@ from app.models.listing import Listing
 from app.models.listing_sharing import ListingSharing
 from app.schemas.listing import ListingCreate, ListingResponse
 from app.services.listing_service import (create_listing, update_listing)
+from app.models.listing_image import ListingImage
 
 
 router = APIRouter(
@@ -16,7 +17,16 @@ router = APIRouter(
 
 def listing_to_response(
     listing: Listing,
+    db: Session,
 ) -> ListingResponse:
+    
+    listing_images = (
+    db.query(ListingImage)
+    .filter(ListingImage.listing_id == listing.id)
+    .order_by(ListingImage.created_at.desc())
+    .all()
+)
+    
     return ListingResponse(
         id=listing.id,
 
@@ -42,6 +52,16 @@ def listing_to_response(
                 "filled_beds": item.filled_beds,
             }
             for item in listing.sharing
+        ],
+
+        images=[
+            {
+                "id": image.id,
+                "image_url": image.image_url,
+                "image_type": image.image_type,
+                "original_filename": image.original_filename,
+            }
+            for image in listing_images
         ],
 
         ac_type=listing.ac_type,
@@ -104,7 +124,7 @@ def create_owner_listing(
             ),
         )
 
-    return listing_to_response(listing)
+    return listing_to_response(listing, db)
 
 
 # ============================================================
@@ -126,7 +146,7 @@ def get_owner_listings(
     )
 
     return [
-        listing_to_response(listing)
+        listing_to_response(listing, db)
         for listing in listings
     ]
 
@@ -156,7 +176,7 @@ def get_owner_listing(
             detail="Listing not found.",
         )
 
-    return listing_to_response(listing)
+    return listing_to_response(listing, db)
 
 
 
@@ -197,7 +217,7 @@ def update_owner_listing(
                 detail="Listing not found.",
             )
 
-        return listing_to_response(listing)
+        return listing_to_response(listing, db)
 
     except PermissionError as exc:
         raise HTTPException(

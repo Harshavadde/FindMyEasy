@@ -5,6 +5,13 @@ from pydantic import BaseModel, Field, model_validator
 # SHARING CREATE
 # ============================================================
 
+
+class ListingImageResponse(BaseModel):
+    id: str
+    image_url: str
+    image_type: str
+    original_filename: str | None = None
+
 class ListingSharingCreate(BaseModel):
     sharing_type: str = Field(
         min_length=1,
@@ -162,6 +169,11 @@ class ListingResponse(BaseModel):
 
     # Each listing can have multiple sharing types.
     sharing: list[ListingSharingResponse]
+
+    images: list[ListingImageResponse] = Field(
+    default_factory=list
+)
+
 
     ac_type: str
 

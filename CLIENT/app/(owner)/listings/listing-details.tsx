@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Pressable,
   RefreshControl,
@@ -24,6 +25,14 @@ type ListingSharing = {
   total_beds: number;
   available_beds: number;
   filled_beds: number;
+};
+
+
+type ListingImage = {
+  id: string;
+  image_url: string;
+  image_type: string;
+  original_filename?: string | null;
 };
 
 
@@ -63,6 +72,8 @@ type Listing = {
 
   restrictions: string | null;
 
+  images?: ListingImage[];
+
   status: string;
 };
 
@@ -73,11 +84,52 @@ type Listing = {
 const FACILITY_ICONS: Record<string, string> = {
   "Wi-Fi": "📶",
   Parking: "🅿️",
-  Laundry: "🧺",
+  WashingMachine: "🧺",
   "Attached Bathroom": "🚿",
   "Power Backup": "🔋",
   CCTV: "📹",
 };
+
+
+const PHOTO_SECTIONS = [
+  {
+    type: "PROPERTY",
+    title: "Property Photos",
+    description: "Building, entrance and common areas",
+  },
+  {
+    type: "ROOM",
+    title: "Room Photos",
+    description: "Rooms and interiors",
+  },
+  {
+    type: "BED",
+    title: "Bed Photos",
+    description: "Beds and sleeping areas",
+  },
+  {
+    type: "WASHROOM",
+    title: "Washroom Photos",
+    description: "Attached and common washrooms",
+  },
+  {
+    type: "MESS",
+    title: "Mess / Food Photos",
+    description: "Dining area and food facilities",
+  },
+] as const;
+
+
+function getImageUrl(imageUrl: string): string {
+  if (
+    imageUrl.startsWith("http://") ||
+    imageUrl.startsWith("https://")
+  ) {
+    return imageUrl;
+  }
+
+  return `${API_BASE_URL.replace(/\/$/, "")}/${imageUrl.replace(/^\//, "")}`;
+}
 
 /** Indian digit grouping: 1234567 -> ₹12,34,567 */
 function formatINR(value: number | null | undefined): string {
@@ -994,17 +1046,86 @@ const occupancy = totalBeds > 0
             )}
           </Card>
 
+
+                    {/* UPLOADED PROPERTY PHOTOS */}
+          <Card title="Property Photos & Gallery" icon="📸">
+            {PHOTO_SECTIONS.map((section) => {
+              const sectionImages = (listing.images ?? []).filter(
+                (image) =>
+                  image.image_type?.toUpperCase() === section.type
+              );
+
+              if (sectionImages.length === 0) {
+                return null;
+              }
+
+              return (
+                <View key={section.type} className="mb-5">
+                  <Text className="mb-1 text-[15px] font-extrabold text-[#0F172A]">
+                    {section.title}
+                  </Text>
+
+                  <Text className="mb-3 text-[12px] text-[#64748B]">
+                    {section.description}
+                  </Text>
+
+                  <View className="flex-row flex-wrap">
+                    {sectionImages.map((photo) => (
+                      <View
+                        key={photo.id}
+                        className="mb-3 mr-3 overflow-hidden rounded-[14px] bg-[#F1F5F9]"
+                        style={{
+                          width: "30%",
+                          aspectRatio: 1,
+                        }}
+                      >
+                        <Image
+                          source={{
+                            uri: getImageUrl(photo.image_url),
+                          }}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                          }}
+                          resizeMode="cover"
+                          onError={(event) => {
+                            console.log(
+                              "Failed to load listing photo:",
+                              photo.image_url,
+                              event.nativeEvent.error
+                            );
+                          }}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              );
+            })}
+
+            {!(listing.images ?? []).some(
+              (image) =>
+                ["PROPERTY", "ROOM", "BED", "WASHROOM", "MESS"].includes(
+                  image.image_type?.toUpperCase() ?? ""
+                )
+            ) && (
+              <Text className="text-[13px] leading-5 text-[#64748B]">
+                No property photos found. Upload photos using Manage Photos.
+              </Text>
+            )}
+          </Card>
+
           
-        <Pressable
-          onPress={() =>
-  router.push({
-    pathname: "/(owner)/listings/create",
-    params: {
-      listingId: String(listing.id),
-      mode: "edit",
-    },
-  })
-}
+                <Pressable
+                  onPress={() =>
+          router.push({
+            pathname: "/(owner)/listings/create",
+            params: {
+              listingId: String(listing.id),
+              mode: "edit",
+            },
+          })
+        }
           className="mb-3 rounded-xl border border-[#2563EB] bg-[#EFF6FF] px-4 py-4"
         >
           <Text className="text-center text-[15px] font-bold text-[#2563EB]">

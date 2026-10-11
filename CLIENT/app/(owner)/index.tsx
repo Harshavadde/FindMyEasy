@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,6 +15,34 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 
 import { API_BASE_URL } from "../../constants/api";
+
+
+
+function getImageUrl(imageUrl: string) {
+  if (
+    imageUrl.startsWith("http://") ||
+    imageUrl.startsWith("https://")
+  ) {
+    return imageUrl;
+  }
+
+  return `${API_BASE_URL}${imageUrl.startsWith("/") ? "" : "/"}${imageUrl}`;
+}
+
+function getCoverImage(listing: Listing) {
+  if (listing.cover_image_url) {
+    return getImageUrl(listing.cover_image_url);
+  }
+
+  const cover = listing.images?.find(
+    (image) => image.image_type?.toUpperCase() === "COVER"
+  );
+
+  return cover?.image_url
+    ? getImageUrl(cover.image_url)
+    : null;
+}
+
 
 // ============================================================
 // TYPES
@@ -43,6 +72,13 @@ type Listing = {
   latitude: string | null;
   longitude: string | null;
   restrictions: string | null;
+  images?: {
+  id: string;
+  image_url: string;
+  image_type: string;
+  original_filename?: string | null;
+}[];
+cover_image_url?: string | null;
   status: string;
 };
 
@@ -141,12 +177,17 @@ function ListingCard({
     >
       <View className="flex-row">
 
-        {/* Property Image */}
-
-        <View className="h-[92px] w-[92px] items-center justify-center rounded-[18px] bg-[#E8F8F5]">
-          <Text className="text-[36px]">
-            🏠
-          </Text>
+        {/* Property Cover Image */}
+        <View className="h-[92px] w-[92px] overflow-hidden items-center justify-center rounded-[18px] bg-[#E8F8F5]">
+          {getCoverImage(listing) ? (
+            <Image
+              source={{ uri: getCoverImage(listing)! }}
+              className="h-full w-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <Text className="text-[36px]">🏠</Text>
+          )}
         </View>
 
         {/* Property Information */}
