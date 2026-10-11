@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.listing import Listing
 from app.models.listing_sharing import ListingSharing
 from app.schemas.listing import ListingCreate
+from app.models.hostel_member import HostelMember
 
 
 def normalize_text(value: str | None) -> str:
@@ -294,15 +295,37 @@ def update_listing(
 
     listing.restrictions = data.restrictions
 
-    # Keep the existing property status unchanged.
-    # Update sharing rows belonging to this listing only.
-    db.query(ListingSharing).filter(
-        ListingSharing.listing_id == listing_id
-    ).delete(synchronize_session=False)
+        # Update existing sharing rows in place to preserve their IDs.
+    existing_sharing = (
+        db.query(ListingSharing)
+        .filter(ListingSharing.listing_id == listing_id)
+        .order_by(ListingSharing.sharing_type)
+        .all()
+    )
+
+    members_by_sharing_id = {}
+    for sharing in existing_sharing:
+        members_by_sharing_id[sharing.id] = (
+            db.query(HostelMember)
+            .filter(HostelMember.sharing_id == sharing.id)
+            .count()
+        )
+
+    existing_by_type = {
+        sharing.sharing_type: sharing
+        for sharing in existing_sharing
+    }
+
+    submitted_types = [item.sharing_type for item in data.sharing]
+
+    if len(submitted_types) != len(set(submitted_types)):
+        raise ValueError("Duplicate sharing types are not allowed.")
 
     for item in data.sharing:
-        db.add(
-            ListingSharing(
+        sharing = existing_by_type.get(item.sharing_type)
+
+        if sharing is None:
+            sharing = ListingSharing(
                 listing_id=listing_id,
                 sharing_type=item.sharing_type,
                 monthly_price=item.monthly_price,
@@ -310,7 +333,25 @@ def update_listing(
                 available_beds=item.available_beds,
                 filled_beds=item.filled_beds,
             )
-        )
+            db.add(sharing)
+        else:
+            sharing.monthly_price = item.monthly_price
+            sharing.total_beds = item.total_beds
+            sharing.available_beds = item.available_beds
+            sharing.filled_beds = item.filled_beds
+
+    for sharing in existing_sharing:
+        if sharing.sharing_type not in submitted_types:
+            member_count = members_by_sharing_id[sharing.id]
+
+            if member_count:
+                raise ValueError(
+                    f"Cannot remove sharing type '{sharing.sharing_type}' "
+                    f"because {member_count} hostel member(s) are assigned "
+                    "to it. Reassign those members first."
+                )
+
+            db.delete(sharing)
 
     try:
         db.commit()

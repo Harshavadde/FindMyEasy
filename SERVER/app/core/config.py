@@ -1,13 +1,10 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+﻿from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./findeasy.db"
-
+    DATABASE_URL: str
     UPLOAD_DIR: str = "uploads"
-
-    PUBLIC_BASE_URL: str = "http://192.168.0.10:8000"
-
+    PUBLIC_BASE_URL: str = "http://192.168.0.9:8000"
     MAX_IMAGE_SIZE_MB: int = 10
 
     model_config = SettingsConfigDict(
