@@ -1,3 +1,4 @@
+
 import {
   Image,
   Pressable,
@@ -6,6 +7,7 @@ import {
 } from "react-native";
 
 import type { Listing } from "../types/listing";
+import { getCoverUrl } from "../services/listingImages";
 
 type Props = {
   listing: Listing;
@@ -16,13 +18,7 @@ export default function ListingCard({
   listing,
   onPress,
 }: Props) {
-  const coverImage =
-    listing.images?.find(
-      (image) =>
-        image.image_type?.toUpperCase() ===
-        "COVER"
-    ) ??
-    listing.images?.[0];
+  const coverUrl = getCoverUrl(listing);
 
   return (
     <Pressable
@@ -33,20 +29,15 @@ export default function ListingCard({
         borderColor: "#E8EEF5",
       }}
     >
-      {coverImage?.url ? (
+      {coverUrl ? (
         <Image
-          source={{
-            uri: coverImage.url,
-          }}
+          source={{ uri: coverUrl }}
           className="h-[190px] w-full"
           resizeMode="cover"
         />
       ) : (
         <View className="h-[190px] w-full items-center justify-center bg-[#EAF2FF]">
-          <Text className="text-[40px]">
-            🏠
-          </Text>
-
+          <Text className="text-[40px]">🏠</Text>
           <Text className="mt-2 text-[12px] font-bold text-[#64748B]">
             No property photo
           </Text>
@@ -83,7 +74,6 @@ export default function ListingCard({
             <Text className="text-[19px] font-extrabold text-[#0F172A]">
               ₹{listing.monthly_price.toLocaleString("en-IN")}
             </Text>
-
             <Text className="text-[10px] text-[#64748B]">
               per month
             </Text>
@@ -107,18 +97,16 @@ export default function ListingCard({
             </Text>
           </View>
 
-          {listing.facilities
-            .slice(0, 2)
-            .map((facility) => (
-              <View
-                key={facility}
-                className="mr-2 rounded-full bg-[#F8FAFC] px-3 py-1.5"
-              >
-                <Text className="text-[10px] font-bold text-[#475569]">
-                  {facility}
-                </Text>
-              </View>
-            ))}
+          {(listing.facilities ?? []).slice(0, 3).map((facility) => (
+            <View
+              key={facility}
+              className="mr-2 rounded-full bg-[#F8FAFC] px-3 py-1.5"
+            >
+              <Text className="text-[10px] font-bold text-[#475569]">
+                {facility}
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
     </Pressable>

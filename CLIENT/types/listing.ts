@@ -12,6 +12,8 @@ export type ListingSharing = {
   total_beds: number;
   available_beds: number;
   filled_beds: number;
+  ac_type?: string | null;
+  floor?: string | null;
 };
 
 export type Listing = {

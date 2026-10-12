@@ -13,26 +13,16 @@ class ListingImageResponse(BaseModel):
     original_filename: str | None = None
 
 class ListingSharingCreate(BaseModel):
-    sharing_type: str = Field(
-        min_length=1,
-        max_length=50,
-    )
+    id: str | None = None
 
-    monthly_price: int = Field(
-        gt=0,
-    )
+    sharing_type: str = Field(min_length=1, max_length=50)
+    ac_type: str = Field(default="Non-AC", max_length=20)
+    floor: str | None = Field(default=None, max_length=50)
 
-    total_beds: int = Field(
-        gt=0,
-    )
-
-    available_beds: int = Field(
-        ge=0,
-    )
-
-    filled_beds: int = Field(
-        ge=0,
-    )
+    monthly_price: int = Field(gt=0)
+    total_beds: int = Field(gt=0)
+    available_beds: int = Field(ge=0)
+    filled_beds: int = Field(ge=0)
 
     @model_validator(mode="after")
     def validate_beds(self):
@@ -40,17 +30,6 @@ class ListingSharingCreate(BaseModel):
             raise ValueError(
                 "Available beds + filled beds must equal total beds."
             )
-
-        if self.available_beds > self.total_beds:
-            raise ValueError(
-                "Available beds cannot exceed total beds."
-            )
-
-        if self.filled_beds > self.total_beds:
-            raise ValueError(
-                "Filled beds cannot exceed total beds."
-            )
-
         return self
 
 
@@ -142,6 +121,8 @@ class ListingCreate(BaseModel):
 class ListingSharingResponse(BaseModel):
     id: str
     sharing_type: str
+    ac_type: str = "Non-AC"
+    floor: str | None = None
     monthly_price: int
     total_beds: int
     available_beds: int

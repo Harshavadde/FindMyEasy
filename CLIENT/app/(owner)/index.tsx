@@ -17,7 +17,6 @@ import { useCallback, useState } from "react";
 import { API_BASE_URL } from "../../constants/api";
 
 
-
 function getImageUrl(imageUrl: string) {
   if (
     imageUrl.startsWith("http://") ||
@@ -59,7 +58,16 @@ type Listing = {
   total_beds: number;
   available_beds: number;
   filled_beds: number;
-  sharing: string[];
+  sharing: {
+  id?: string;
+  sharing_type: string;
+  ac_type?: string;
+  floor?: string | null;
+  monthly_price: number;
+  total_beds: number;
+  available_beds: number;
+  filled_beds: number;
+}[];
   ac_type: string;
   facilities: string[];
   food_available: string;
@@ -151,6 +159,34 @@ function ListingCard({
     });
   };
 
+
+  const sharingOptions = Array.isArray(listing.sharing)
+  ? listing.sharing.filter(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        Number(item.monthly_price) > 0
+    )
+  : [];
+
+const startingPrice =
+  sharingOptions.length > 0
+    ? Math.min(
+        ...sharingOptions.map((item) =>
+          Number(item.monthly_price)
+        )
+      )
+    : Number(listing.monthly_price) > 0
+      ? Number(listing.monthly_price)
+      : null;
+
+const availableBeds = sharingOptions.length > 0
+  ? sharingOptions.reduce(
+      (total, item) => total + Number(item.available_beds || 0),
+      0
+    )
+  : Number(listing.available_beds || 0);
+
   return (
     <Pressable
       onPress={handleOpenListingDetails}
@@ -226,17 +262,20 @@ function ListingCard({
           <View className="mt-2 flex-row items-center justify-between">
 
             <Text className="text-[15px] font-extrabold text-[#2563EB]">
-              ₹{listing.monthly_price}
-
-              <Text className="text-[10px] font-medium text-[#64748B]">
-                {" "}
-                / month
-              </Text>
+              {startingPrice !== null
+                ? `₹${startingPrice.toLocaleString("en-IN")}`
+                : "Price not set"}
+              {startingPrice !== null && (
+                <Text className="text-[10px] font-medium text-[#64748B]">
+                  {" "}
+                  / month
+                </Text>
+              )}
             </Text>
 
             <Text className="text-[11px] font-semibold text-[#64748B]">
-              {listing.available_beds} beds available
-            </Text>
+            {availableBeds} beds available
+          </Text>
 
           </View>
 

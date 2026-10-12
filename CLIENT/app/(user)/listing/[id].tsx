@@ -1,68 +1,466 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 
-import {
-  router,
-  useLocalSearchParams,
-} from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
 
-import {
-  getPublicListing,
-} from "../../../services/api";
+import { getPublicListing } from "../../../services/api";
 
 import type { Listing, ListingSharing } from "../../../types/listing";
 
+/* -------------------------------------------------------------------------- */
+/*  Image helpers                                                             */
+/* -------------------------------------------------------------------------- */
+
+type ListingImage = NonNullable<Listing["images"]>[number];
+
+type GalleryImage = {
+  key: string;
+  url: string;
+  isCover: boolean;
+};
+
+// Only used when the backend returns relative paths such as "/uploads/a.jpg".
+// Full https:// URLs (Cloudinary, S3, Supabase...) are used as they are.
+const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+
+function resolveImageUrl(raw: string): string {
+  const url = raw.trim();
+
+  if (/^(https?:|file:|data:)/i.test(url)) return url;
+
+  return API_BASE ? `${API_BASE}/${url.replace(/^\//, "")}` : url;
+}
+
+// Cleans the images saved by the owner: removes empty or duplicate URLs and
+// always puts the COVER image first, followed by the other photos.
+function buildGallery(
+  images: Listing["images"] | null | undefined
+): GalleryImage[] {
+  const seen = new Set<string>();
+  const list: GalleryImage[] = [];
+
+  (images ?? []).forEach((image: ListingImage, index: number) => {
+    if (typeof image.url !== "string" || !image.url.trim()) return;
+
+    const url = resolveImageUrl(image.url);
+
+    if (seen.has(url)) return;
+    seen.add(url);
+
+    list.push({
+      key: `${image.id ?? "image"}-${index}`,
+      url,
+      isCover: image.image_type?.trim().toUpperCase() === "COVER",
+    });
+  });
+
+  const coverIndex = list.findIndex((item) => item.isCover);
+
+  if (coverIndex > 0) {
+    const [cover] = list.splice(coverIndex, 1);
+    list.unshift(cover);
+  }
+
+  return list;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Gallery                                                                   */
+/* -------------------------------------------------------------------------- */
+
+function RemoteImage({
+  uri,
+  width,
+  height,
+  fit = "cover",
+  dark = false,
+  onPress,
+}: {
+  uri: string;
+  width: number;
+  height: number;
+  fit?: "cover" | "contain";
+  dark?: boolean;
+  onPress?: () => void;
+}) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">(
+    "loading"
+  );
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={{
+        width,
+        height,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: dark ? "#000000" : "#EAF2FF",
+      }}
+    >
+      {status !== "error" && (
+        <Image
+          source={{ uri }}
+          style={{ width, height }}
+          resizeMode={fit}
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("error")}
+        />
+      )}
+
+      {status === "loading" && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <ActivityIndicator color={dark ? "#FFFFFF" : "#2563EB"} />
+        </View>
+      )}
+
+      {status === "error" && (
+        <View className="items-center px-6">
+          <MaterialCommunityIcons
+            name="image-broken-variant"
+            size={40}
+            color={dark ? "#94A3B8" : "#64748B"}
+          />
+          <Text
+            className="mt-2 text-center text-[12px]"
+            style={{ color: dark ? "#CBD5E1" : "#64748B" }}
+          >
+            This photo could not be loaded
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+function PropertyGallery({
+  images,
+  onBack,
+}: {
+  images: GalleryImage[];
+  onBack: () => void;
+}) {
+  const { width, height: screenHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  const heroHeight = Math.round(width * 0.8);
+
+  const heroRef = useRef<FlatList<GalleryImage>>(null);
+
+  const [index, setIndex] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
+
+  const total = images.length;
+  const current = images[index];
+
+  const handleScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = Math.round(e.nativeEvent.contentOffset.x / width);
+
+    setIndex(Math.min(Math.max(next, 0), Math.max(total - 1, 0)));
+  };
+
+  const goTo = (next: number) => {
+    setIndex(next);
+
+    heroRef.current?.scrollToIndex({ index: next, animated: true });
+  };
+
+  const closeViewer = () => {
+    setViewerOpen(false);
+
+    // The viewer may have changed the page, so bring the hero in sync.
+    requestAnimationFrame(() => {
+      heroRef.current?.scrollToIndex({ index, animated: false });
+    });
+  };
+
+  const backButton = (
+    <Pressable
+      onPress={onBack}
+      hitSlop={10}
+      accessibilityLabel="Go back"
+      style={{
+        position: "absolute",
+        left: 16,
+        top: insets.top + 8,
+        height: 42,
+        width: 42,
+        borderRadius: 21,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(255,255,255,0.92)",
+      }}
+    >
+      <MaterialCommunityIcons name="chevron-left" size={28} color="#0F172A" />
+    </Pressable>
+  );
+
+  /* ---- No photos uploaded by the owner ---- */
+  if (total === 0) {
+    return (
+      <View className="bg-white">
+        <View
+          className="items-center justify-center bg-[#EAF2FF]"
+          style={{ height: heroHeight }}
+        >
+          <MaterialCommunityIcons
+            name="image-off-outline"
+            size={56}
+            color="#94A3B8"
+          />
+          <Text className="mt-3 text-[13px] font-semibold text-[#64748B]">
+            The owner has not added photos yet
+          </Text>
+        </View>
+
+        {backButton}
+      </View>
+    );
+  }
+
+  return (
+    <View className="bg-white">
+      {/* ---- Hero carousel: cover first, then the other photos ---- */}
+      <View>
+        <FlatList
+          ref={heroRef}
+          data={images}
+          keyExtractor={(item) => item.key}
+          horizontal
+          pagingEnabled
+          bounces={false}
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleScrollEnd}
+          getItemLayout={(_, i) => ({
+            length: width,
+            offset: width * i,
+            index: i,
+          })}
+          renderItem={({ item }) => (
+            <RemoteImage
+              uri={item.url}
+              width={width}
+              height={heroHeight}
+              onPress={() => setViewerOpen(true)}
+            />
+          )}
+        />
+
+        {backButton}
+
+        {/* Fullscreen hint */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            right: 16,
+            top: insets.top + 8,
+            height: 42,
+            width: 42,
+            borderRadius: 21,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "rgba(15,23,42,0.55)",
+          }}
+        >
+          <MaterialCommunityIcons name="arrow-expand" size={20} color="#FFFFFF" />
+        </View>
+
+        {/* Cover label */}
+        {current?.isCover && (
+          <View
+            pointerEvents="none"
+            className="absolute bottom-4 left-4 rounded-full px-3 py-1.5"
+            style={{ backgroundColor: "#FFC72C" }}
+          >
+            <Text className="text-[11px] font-extrabold text-[#1B2433]">
+              Cover photo
+            </Text>
+          </View>
+        )}
+
+        {/* Counter */}
+        {total > 1 && (
+          <View
+            pointerEvents="none"
+            className="absolute bottom-4 right-4 rounded-full px-3 py-1.5"
+            style={{ backgroundColor: "rgba(15,23,42,0.65)" }}
+          >
+            <Text className="text-[11px] font-bold text-white">
+              {index + 1} / {total}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* ---- Thumbnails ---- */}
+      {total > 1 && (
+        <FlatList
+          data={images}
+          keyExtractor={(item) => `thumb-${item.key}`}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            gap: 10,
+          }}
+          renderItem={({ item, index: i }) => {
+            const active = i === index;
+
+            return (
+              <Pressable
+                onPress={() => goTo(i)}
+                style={{
+                  borderRadius: 12,
+                  borderWidth: 2,
+                  borderColor: active ? "#2563EB" : "transparent",
+                  opacity: active ? 1 : 0.75,
+                  overflow: "hidden",
+                }}
+              >
+                <Image
+                  source={{ uri: item.url }}
+                  style={{ width: 72, height: 56, backgroundColor: "#EAF2FF" }}
+                  resizeMode="cover"
+                />
+              </Pressable>
+            );
+          }}
+        />
+      )}
+
+      {/* ---- Fullscreen viewer ---- */}
+      <Modal
+        visible={viewerOpen}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeViewer}
+      >
+        <View style={{ flex: 1, backgroundColor: "#000000" }}>
+          <FlatList
+            data={images}
+            keyExtractor={(item) => `viewer-${item.key}`}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={index}
+            onMomentumScrollEnd={handleScrollEnd}
+            getItemLayout={(_, i) => ({
+              length: width,
+              offset: width * i,
+              index: i,
+            })}
+            renderItem={({ item }) => (
+              <RemoteImage
+                uri={item.url}
+                width={width}
+                height={screenHeight}
+                fit="contain"
+                dark
+              />
+            )}
+          />
+
+          <Pressable
+            onPress={closeViewer}
+            hitSlop={10}
+            accessibilityLabel="Close photo viewer"
+            style={{
+              position: "absolute",
+              right: 16,
+              top: insets.top + 8,
+              height: 42,
+              width: 42,
+              borderRadius: 21,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255,255,255,0.18)",
+            }}
+          >
+            <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
+          </Pressable>
+
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              bottom: insets.bottom + 20,
+              alignSelf: "center",
+              borderRadius: 999,
+              paddingHorizontal: 14,
+              paddingVertical: 6,
+              backgroundColor: "rgba(255,255,255,0.18)",
+            }}
+          >
+            <Text className="text-[12px] font-bold text-white">
+              {index + 1} / {total}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Screen                                                                    */
+/* -------------------------------------------------------------------------- */
+
 export default function UserListingDetails() {
-  const params =
-    useLocalSearchParams<{
-      id?: string | string[];
-    }>();
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+  }>();
 
-  const listingId = Array.isArray(params.id)
-    ? params.id[0]
-    : params.id;
+  const listingId = Array.isArray(params.id) ? params.id[0] : params.id;
 
-  const [listing, setListing] =
-    useState<Listing | null>(null);
+  const [listing, setListing] = useState<Listing | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] =
-    useState(true);
+  const gallery = useMemo(
+    () => buildGallery(listing?.images),
+    [listing?.images]
+  );
 
-  useEffect(() => {
-    if (!listingId) {
-      setLoading(false);
-      return;
-    }
-
-    loadListing();
-  }, [listingId]);
-
-  const loadListing = async () => {
+  const loadListing = useCallback(async () => {
     try {
-      const data =
-        await getPublicListing(listingId!);
+      const data = await getPublicListing(listingId!);
 
       setListing(data);
     } catch (error: any) {
-      console.error(
-        "Listing details error:",
-        error
-      );
+      console.error("Listing details error:", error);
 
       Alert.alert(
         "Unable to load property",
-        error?.message ||
-        "This property could not be loaded.",
+        error?.message || "This property could not be loaded.",
         [
           {
             text: "Go Back",
@@ -73,13 +471,19 @@ export default function UserListingDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [listingId]);
+
+  useEffect(() => {
+    if (!listingId) {
+      setLoading(false);
+      return;
+    }
+
+    loadListing();
+  }, [listingId, loadListing]);
 
   const openMaps = async () => {
-    if (
-      !listing?.latitude ||
-      !listing?.longitude
-    ) {
+    if (!listing?.latitude || !listing?.longitude) {
       Alert.alert(
         "Location unavailable",
         "This property does not have map coordinates."
@@ -103,9 +507,7 @@ export default function UserListingDetails() {
       return;
     }
 
-    await Linking.openURL(
-      `tel:${listing.owner_phone}`
-    );
+    await Linking.openURL(`tel:${listing.owner_phone}`);
   };
 
   const whatsappOwner = async () => {
@@ -117,25 +519,15 @@ export default function UserListingDetails() {
       return;
     }
 
-    const phone =
-      listing.owner_phone.replace(
-        /[^0-9]/g,
-        ""
-      );
+    const phone = listing.owner_phone.replace(/[^0-9]/g, "");
 
-    const url =
-      `https://wa.me/${phone}`;
-
-    await Linking.openURL(url);
+    await Linking.openURL(`https://wa.me/${phone}`);
   };
 
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center bg-[#F5F9FD]">
-        <ActivityIndicator
-          size="large"
-          color="#2563EB"
-        />
+        <ActivityIndicator size="large" color="#2563EB" />
 
         <Text className="mt-3 text-[12px] text-[#64748B]">
           Loading property...
@@ -159,36 +551,11 @@ export default function UserListingDetails() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: 10,
+          paddingBottom: 24,
         }}
       >
-        <View className="bg-white">
-          {listing.images?.length > 0 &&
-            listing.images[0]?.url ? (
-            <Image
-              source={{
-                uri: listing.images[0].url,
-              }}
-              className="h-[270px] w-full"
-              resizeMode="cover"
-            />
-          ) : (
-            <View className="h-[270px] w-full items-center justify-center bg-[#EAF2FF]">
-              <Text className="text-[55px]">
-                🏠
-              </Text>
-            </View>
-          )}
-
-          <Pressable
-            onPress={() => router.back()}
-            className="absolute left-5 top-12 h-11 w-11 items-center justify-center rounded-full bg-white"
-          >
-            <Text className="text-[25px] text-[#0F172A]">
-              ‹
-            </Text>
-          </Pressable>
-        </View>
+        {/* COVER IMAGE AND PROPERTY PHOTOS (from the owner's uploads) */}
+        <PropertyGallery images={gallery} onBack={() => router.back()} />
 
         <View className="p-5">
           <View className="flex-row items-start justify-between">
@@ -210,9 +577,7 @@ export default function UserListingDetails() {
           </View>
 
           <View className="mt-5 rounded-[18px] bg-white p-4">
-            <Text className="text-[12px] text-[#64748B]">
-              Monthly Rent
-            </Text>
+            <Text className="text-[12px] text-[#64748B]">Monthly Rent</Text>
 
             <Text className="mt-1 text-[25px] font-extrabold text-[#0F172A]">
               ₹{listing.monthly_price.toLocaleString("en-IN")}
@@ -220,12 +585,9 @@ export default function UserListingDetails() {
 
             <Text className="mt-1 text-[11px] text-[#64748B]">
               Security deposit: ₹
-              {(
-                listing.security_deposit || 0
-              ).toLocaleString("en-IN")}
+              {(listing.security_deposit || 0).toLocaleString("en-IN")}
             </Text>
           </View>
-
 
           {/* BEDS AND SHARING */}
           <Section title="Beds & Availability">
@@ -246,6 +608,7 @@ export default function UserListingDetails() {
                 (sum, item) => sum + Number(item.filled_beds || 0),
                 0
               );
+
               const occupancy = totalBeds
                 ? Math.round((filledBeds / totalBeds) * 100)
                 : 0;
@@ -274,27 +637,59 @@ export default function UserListingDetails() {
                   </Text>
 
                   {sharingOptions.length ? (
-                   sharingOptions.map((item: ListingSharing) => (
-                      <View
-                        key={item.id || item.sharing_type}
-                        className="mb-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4"
-                      >
-                        <View className="mb-3 flex-row justify-between">
-                          <Text className="font-extrabold text-[#2563EB]">
-                            {item.sharing_type} Sharing
-                          </Text>
-                          <Text className="font-extrabold text-[#0F172A]">
-                            ₹{Number(item.monthly_price).toLocaleString("en-IN")}/month
-                          </Text>
-                        </View>
+                    sharingOptions.map(
+                      (item: ListingSharing, index: number) => (
+                        <View
+                          key={item.id || `${item.sharing_type}-${index}`}
+                          className="mb-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4"
+                        >
+                          <View className="mb-3 flex-row justify-between">
+                            <Text className="font-extrabold text-[#2563EB]">
+                              {item.sharing_type} Sharing
+                            </Text>
 
-                        <View className="flex-row justify-between">
-                          <InfoItem label="Total beds" value={String(item.total_beds)} />
-                          <InfoItem label="Available" value={String(item.available_beds)} />
-                          <InfoItem label="Filled" value={String(item.filled_beds)} />
+                            <Text className="font-extrabold text-[#0F172A]">
+                              ₹
+                              {Number(item.monthly_price).toLocaleString(
+                                "en-IN"
+                              )}
+                              /month
+                            </Text>
+                          </View>
+
+                          <View className="mb-3 flex-row flex-wrap">
+                            <View className="mb-2 mr-2 rounded-full bg-blue-50 px-3 py-2">
+                              <Text className="text-[11px] font-bold text-blue-700">
+                                {item.ac_type || "Non-AC"}
+                              </Text>
+                            </View>
+
+                            {item.floor?.trim() ? (
+                              <View className="mb-2 rounded-full bg-blue-50 px-3 py-2">
+                                <Text className="text-[11px] font-bold text-blue-700">
+                                  {item.floor}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+
+                          <View className="flex-row justify-between">
+                            <InfoItem
+                              label="Total beds"
+                              value={String(item.total_beds)}
+                            />
+                            <InfoItem
+                              label="Available"
+                              value={String(item.available_beds)}
+                            />
+                            <InfoItem
+                              label="Filled"
+                              value={String(item.filled_beds)}
+                            />
+                          </View>
                         </View>
-                      </View>
-                    ))
+                      )
+                    )
                   ) : (
                     <Text className="text-[13px] text-[#64748B]">
                       Sharing details are not available.
@@ -305,11 +700,8 @@ export default function UserListingDetails() {
             })()}
           </Section>
 
-
           {listing.description ? (
-            <Section
-              title="About this property"
-            >
+            <Section title="About this property">
               <Text className="text-[13px] leading-6 text-[#475569]">
                 {listing.description}
               </Text>
@@ -317,48 +709,31 @@ export default function UserListingDetails() {
           ) : null}
 
           <Section title="Property Details">
-            <DetailRow
-              label="For"
-              value={listing.gender}
-            />
+            <DetailRow label="For" value={listing.gender} />
 
-            <DetailRow
-              label="AC"
-              value={listing.ac_type}
-            />
+            <DetailRow label="AC" value={listing.ac_type} />
 
-            <DetailRow
-              label="Food"
-              value={
-                listing.food_available
-              }
-            />
+            <DetailRow label="Food" value={listing.food_available} />
 
-            <DetailRow
-              label="Address"
-              value={listing.address}
-            />
+            <DetailRow label="Address" value={listing.address} />
           </Section>
 
           {(listing.facilities ?? []).length > 0 && (
             <Section title="Facilities">
               <View className="flex-row flex-wrap">
-                {(listing.facilities ?? []).map(
-                  (facility: string) => (
-                    <View
-                      key={facility}
-                      className="mb-2 mr-2 rounded-full bg-[#EFF6FF] px-3 py-2"
-                    >
-                      <Text className="text-[11px] font-bold text-[#2563EB]">
-                        ✓ {facility}
-                      </Text>
-                    </View>
-                  )
-                )}
+                {(listing.facilities ?? []).map((facility: string) => (
+                  <View
+                    key={facility}
+                    className="mb-2 mr-2 rounded-full bg-[#EFF6FF] px-3 py-2"
+                  >
+                    <Text className="text-[11px] font-bold text-[#2563EB]">
+                      ✓ {facility}
+                    </Text>
+                  </View>
+                ))}
               </View>
             </Section>
           )}
-
 
           {/* FOOD AND MEAL TIMINGS */}
           <Section title="Food & Meal Timings">
@@ -400,7 +775,6 @@ export default function UserListingDetails() {
             ))}
           </Section>
 
-
           {listing.restrictions ? (
             <Section title="Rules & Restrictions">
               <Text className="text-[13px] leading-6 text-[#475569]">
@@ -408,7 +782,6 @@ export default function UserListingDetails() {
               </Text>
             </Section>
           ) : null}
-
 
           {/* OWNER CONTACT */}
           <Section title="Owner Contact">
@@ -443,17 +816,14 @@ export default function UserListingDetails() {
             )}
           </Section>
 
-
           <Section title="Location">
             <Text className="text-[13px] leading-6 text-[#475569]">
               {listing.address}
             </Text>
 
-            {listing.latitude &&
-              listing.longitude ? (
+            {listing.latitude && listing.longitude ? (
               <Text className="mt-2 text-[11px] text-[#64748B]">
-                {listing.latitude},{" "}
-                {listing.longitude}
+                {listing.latitude}, {listing.longitude}
               </Text>
             ) : null}
 
@@ -468,29 +838,13 @@ export default function UserListingDetails() {
           </Section>
         </View>
       </ScrollView>
-
-      {/* <View className="absolute bottom-0 left-0 right-0 flex-row border-t border-[#E2E8F0] bg-white px-5 pb-7 pt-4">
-        <Pressable
-          onPress={callOwner}
-          className="mr-2 flex-1 items-center justify-center rounded-[15px] bg-[#16A34A] py-4"
-        >
-          <Text className="text-[13px] font-extrabold text-white">
-            📞 Call
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={whatsappOwner}
-          className="ml-2 flex-1 items-center justify-center rounded-[15px] bg-[#25D366] py-4"
-        >
-          <Text className="text-[13px] font-extrabold text-white">
-            WhatsApp
-          </Text>
-        </Pressable>
-      </View> */}
     </View>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Small components                                                          */
+/* -------------------------------------------------------------------------- */
 
 function Section({
   title,
@@ -510,18 +864,10 @@ function Section({
   );
 }
 
-function InfoItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <View className="mr-5">
-      <Text className="text-[11px] text-[#64748B]">
-        {label}
-      </Text>
+      <Text className="text-[11px] text-[#64748B]">{label}</Text>
 
       <Text className="mt-1 text-[14px] font-extrabold text-[#0F172A]">
         {value}
@@ -530,13 +876,7 @@ function InfoItem({
   );
 }
 
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View className="mb-3 flex-row">
       <Text className="w-[110px] text-[12px] font-bold text-[#64748B]">

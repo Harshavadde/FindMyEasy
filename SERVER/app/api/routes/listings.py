@@ -42,10 +42,13 @@ def listing_to_response(
 
         security_deposit=listing.security_deposit,
 
+        
         sharing=[
             {
-                "id": item.id,
+                "id": str(item.id),
                 "sharing_type": item.sharing_type,
+                "ac_type": item.ac_type,
+                "floor": item.floor,
                 "monthly_price": item.monthly_price,
                 "total_beds": item.total_beds,
                 "available_beds": item.available_beds,
@@ -53,6 +56,7 @@ def listing_to_response(
             }
             for item in listing.sharing
         ],
+
 
         images=[
             {

@@ -27,6 +27,18 @@ class ListingSharing(Base):
         nullable=False,
     )
 
+    ac_type = Column(
+    String(20),
+    nullable=False,
+    default="Non-AC",
+    server_default="Non-AC",
+)
+
+    floor = Column(
+        String(50),
+        nullable=True,
+    )
+
     monthly_price = Column(
         Integer,
         nullable=False,
@@ -50,6 +62,8 @@ class ListingSharing(Base):
         nullable=False,
         default=0,
     )
+
+    
 
     listing = relationship(
         "Listing",

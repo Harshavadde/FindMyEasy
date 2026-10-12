@@ -21,6 +21,8 @@ import { API_BASE_URL } from "../../../constants/api";
 type ListingSharing = {
   id: string;
   sharing_type: string;
+  ac_type?: string | null;
+  floor?: string | null;
   monthly_price: number;
   total_beds: number;
   available_beds: number;
@@ -879,17 +881,35 @@ const occupancy = totalBeds > 0
 </Text>
 
 {sharingDetails.length > 0 ? (
-  sharingDetails.map((item) => (
+  sharingDetails.map((item, index) => (
     <View
-      key={item.id || item.sharing_type}
+      key={item.id || `${item.sharing_type}-${index}`}
       className="mb-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4"
     >
-      <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-[15px] font-extrabold text-[#1D4ED8]">
-          {sharingLabel(item.sharing_type)}
-        </Text>
+      <View className="mb-3 flex-row items-start justify-between">
+        <View className="flex-1">
+          <Text className="text-[15px] font-extrabold text-[#1D4ED8]">
+            {sharingLabel(item.sharing_type)}
+          </Text>
 
-        <Text className="text-[15px] font-extrabold text-[#0F172A]">
+          <View className="mt-2 flex-row flex-wrap">
+            <View className="mb-2 mr-2 rounded-full bg-blue-100 px-3 py-1.5">
+              <Text className="text-[11px] font-bold text-blue-800">
+                {item.ac_type || "Non-AC"}
+              </Text>
+            </View>
+
+            {item.floor ? (
+              <View className="mb-2 rounded-full bg-purple-100 px-3 py-1.5">
+                <Text className="text-[11px] font-bold text-purple-800">
+                  {item.floor}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        <Text className="ml-2 text-[15px] font-extrabold text-[#0F172A]">
           {formatINR(item.monthly_price)}/month
         </Text>
       </View>

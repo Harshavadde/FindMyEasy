@@ -179,6 +179,8 @@ def create_listing(
         sharing_row = ListingSharing(
             listing_id=listing.id,
             sharing_type=sharing.sharing_type,
+            ac_type=sharing.ac_type,
+            floor=sharing.floor,
             monthly_price=sharing.monthly_price,
             total_beds=sharing.total_beds,
             available_beds=sharing.available_beds,
@@ -295,13 +297,20 @@ def update_listing(
 
     listing.restrictions = data.restrictions
 
-        # Update existing sharing rows in place to preserve their IDs.
+    
+    # Update sharing options by ID, not sharing_type.
+    # This allows multiple options with the same sharing type.
+
     existing_sharing = (
         db.query(ListingSharing)
         .filter(ListingSharing.listing_id == listing_id)
-        .order_by(ListingSharing.sharing_type)
         .all()
     )
+
+    existing_by_id = {
+        sharing.id: sharing
+        for sharing in existing_sharing
+    }
 
     members_by_sharing_id = {}
     for sharing in existing_sharing:
@@ -311,20 +320,37 @@ def update_listing(
             .count()
         )
 
-    existing_by_type = {
-        sharing.sharing_type: sharing
-        for sharing in existing_sharing
-    }
+    submitted_ids = [
+        item.id for item in data.sharing
+        if getattr(item, "id", None)
+    ]
 
-    submitted_types = [item.sharing_type for item in data.sharing]
+    if len(submitted_ids) != len(set(submitted_ids)):
+        raise ValueError(
+            "The same sharing option was submitted more than once."
+        )
 
-    if len(submitted_types) != len(set(submitted_types)):
-        raise ValueError("Duplicate sharing types are not allowed.")
+    # Validate all submitted IDs before changing sharing rows.
+    for item in data.sharing:
+        item_id = getattr(item, "id", None)
+
+        if item_id and item_id not in existing_by_id:
+            raise ValueError(
+                "A sharing option does not belong to this property. "
+                "Refresh the listing and try again."
+            )
+
+    retained_ids = set()
 
     for item in data.sharing:
-        sharing = existing_by_type.get(item.sharing_type)
+        item_id = getattr(item, "id", None)
 
-        if sharing is None:
+        if item_id:
+            # Update the existing row, preserving its ID and member links.
+            sharing = existing_by_id[item_id]
+            retained_ids.add(sharing.id)
+        else:
+            # New option, even if its sharing_type matches another option.
             sharing = ListingSharing(
                 listing_id=listing_id,
                 sharing_type=item.sharing_type,
@@ -332,26 +358,35 @@ def update_listing(
                 total_beds=item.total_beds,
                 available_beds=item.available_beds,
                 filled_beds=item.filled_beds,
+                ac_type=item.ac_type,
+                floor=item.floor,
             )
             db.add(sharing)
-        else:
-            sharing.monthly_price = item.monthly_price
-            sharing.total_beds = item.total_beds
-            sharing.available_beds = item.available_beds
-            sharing.filled_beds = item.filled_beds
+            continue
 
+        sharing.sharing_type = item.sharing_type
+        sharing.monthly_price = item.monthly_price
+        sharing.total_beds = item.total_beds
+        sharing.available_beds = item.available_beds
+        sharing.filled_beds = item.filled_beds
+        sharing.ac_type = item.ac_type
+        sharing.floor = item.floor
+
+    # Delete only omitted options that have no assigned members.
     for sharing in existing_sharing:
-        if sharing.sharing_type not in submitted_types:
+        if sharing.id not in retained_ids:
             member_count = members_by_sharing_id[sharing.id]
 
             if member_count:
                 raise ValueError(
-                    f"Cannot remove sharing type '{sharing.sharing_type}' "
-                    f"because {member_count} hostel member(s) are assigned "
+                    f"Cannot remove option "
+                    f"'{sharing.sharing_type} Sharing' because "
+                    f"{member_count} hostel member(s) are assigned "
                     "to it. Reassign those members first."
                 )
 
             db.delete(sharing)
+
 
     try:
         db.commit()

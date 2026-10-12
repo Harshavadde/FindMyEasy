@@ -536,50 +536,27 @@ function normalizeSharing(
 }
 
 function matchesRoomSharing(
-  listingSharing: string[],
+  listingSharing: Listing["sharing"],
   selectedSharing: string[]
 ): boolean {
-  /*
-   * No room-sharing filter selected.
-   *
-   * Therefore allow all.
-   */
-
-  if (
-    selectedSharing.length === 0
-  ) {
+  // No sharing filter selected means allow all.
+  if (selectedSharing.length === 0) {
     return true;
   }
 
-  /*
-   * Listing has no sharing data.
-   */
-
-  if (
-    !Array.isArray(
-      listingSharing
-    )
-  ) {
+  // Listing has no sharing data.
+  if (!Array.isArray(listingSharing)) {
     return false;
   }
 
-  const listingValues =
-    listingSharing.map(
-      normalizeSharing
-    );
+  // Extract sharing_type from each sharing object.
+  const listingValues = listingSharing.map((item) =>
+    normalizeSharing(String(item.sharing_type ?? ""))
+  );
 
-  /*
-   * ANY selected sharing option
-   * can match.
-   */
-
-  return selectedSharing.some(
-    (selected) =>
-      listingValues.includes(
-        normalizeSharing(
-          selected
-        )
-      )
+  // Match when any selected sharing type is available.
+  return selectedSharing.some((selected) =>
+    listingValues.includes(normalizeSharing(selected))
   );
 }
 

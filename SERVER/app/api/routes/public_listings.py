@@ -141,17 +141,19 @@ def listing_to_public_response(
         "available_beds": listing.available_beds,
         "filled_beds": listing.filled_beds,
 
-       "sharing": [
-    {
-        "id": item.id,
-        "sharing_type": item.sharing_type,
-        "monthly_price": item.monthly_price,
-        "total_beds": item.total_beds,
-        "available_beds": item.available_beds,
-        "filled_beds": item.filled_beds,
-    }
-    for item in listing.sharing
-],
+        "sharing": [
+            {
+                "id": str(item.id),
+                "sharing_type": item.sharing_type,
+                "ac_type": item.ac_type,
+                "floor": item.floor,
+                "monthly_price": item.monthly_price,
+                "total_beds": item.total_beds,
+                "available_beds": item.available_beds,
+                "filled_beds": item.filled_beds,
+            }
+            for item in listing.sharing
+        ],
 
         "ac_type": listing.ac_type,
 
