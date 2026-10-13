@@ -96,8 +96,7 @@ export async function postJson<T = any>(
     if (error?.name === "AbortError") {
       throw new ApiError(
         "timeout",
-        `The server at ${API_BASE_URL} did not respond in ${
-          timeoutMs / 1000
+        `The server at ${API_BASE_URL} did not respond in ${timeoutMs / 1000
         } seconds.`
       );
     }
@@ -133,7 +132,8 @@ export async function postJson<T = any>(
 
 export async function getJson<T = any>(
   path: string,
-  timeoutMs = 15000
+  timeoutMs = 15000,
+  headers: Record<string, string> = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
 
@@ -150,6 +150,7 @@ export async function getJson<T = any>(
       method: "GET",
       headers: {
         Accept: "application/json",
+        ...headers,
       },
       signal: controller.signal,
     });
@@ -157,8 +158,7 @@ export async function getJson<T = any>(
     if (error?.name === "AbortError") {
       throw new ApiError(
         "timeout",
-        `The server at ${API_BASE_URL} did not respond in ${
-          timeoutMs / 1000
+        `The server at ${API_BASE_URL} did not respond in ${timeoutMs / 1000
         } seconds.`
       );
     }

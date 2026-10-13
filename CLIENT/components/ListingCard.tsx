@@ -1,5 +1,7 @@
-
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   Text,
@@ -7,7 +9,11 @@ import {
 } from "react-native";
 
 import type { Listing } from "../types/listing";
-import { getCoverUrl } from "../services/listingImages";
+import {
+  addFavorite,
+  getFavoriteIds,
+  removeFavorite,
+} from "../services/favorites";
 
 type Props = {
   listing: Listing;
@@ -18,7 +24,56 @@ export default function ListingCard({
   listing,
   onPress,
 }: Props) {
-  const coverUrl = getCoverUrl(listing);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    getFavoriteIds()
+      .then((ids) => {
+        if (active) {
+          setIsFavorite(ids.includes(String(listing.id)));
+        }
+      })
+      .catch(() => {
+        // Keep the default state if favorites cannot be loaded.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [listing.id]);
+
+  const toggleFavorite = async () => {
+    if (favoriteLoading) return;
+
+    setFavoriteLoading(true);
+
+    try {
+      if (isFavorite) {
+        await removeFavorite(String(listing.id));
+        setIsFavorite(false);
+      } else {
+        await addFavorite(String(listing.id));
+        setIsFavorite(true);
+      }
+    } catch (error) {
+      Alert.alert(
+        "Favorites",
+        error instanceof Error
+          ? error.message
+          : "Unable to update favorites. Please try again."
+      );
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
+
+  const coverImage =
+    listing.images?.find(
+      (image) => image.image_type?.toUpperCase() === "COVER"
+    ) ?? listing.images?.[0];
 
   return (
     <Pressable
@@ -29,20 +84,47 @@ export default function ListingCard({
         borderColor: "#E8EEF5",
       }}
     >
-      {coverUrl ? (
-        <Image
-          source={{ uri: coverUrl }}
-          className="h-[190px] w-full"
-          resizeMode="cover"
-        />
-      ) : (
-        <View className="h-[190px] w-full items-center justify-center bg-[#EAF2FF]">
-          <Text className="text-[40px]">🏠</Text>
-          <Text className="mt-2 text-[12px] font-bold text-[#64748B]">
-            No property photo
-          </Text>
-        </View>
-      )}
+      <View>
+        {coverImage?.url ? (
+          <Image
+            source={{ uri: coverImage.url }}
+            className="h-[190px] w-full"
+            resizeMode="cover"
+          />
+        ) : (
+          <View className="h-[190px] w-full items-center justify-center bg-[#EAF2FF]">
+            <Text className="text-[40px]">🏠</Text>
+            <Text className="mt-2 text-[12px] font-bold text-[#64748B]">
+              No property photo
+            </Text>
+          </View>
+        )}
+
+        <Pressable
+          onPress={toggleFavorite}
+          disabled={favoriteLoading}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isFavorite ? "Remove from favorites" : "Add to favorites"
+          }
+          hitSlop={8}
+          className="absolute right-3 top-3 h-11 w-11 items-center justify-center rounded-full bg-white"
+          style={{
+            elevation: 3,
+            shadowColor: "#000",
+            shadowOpacity: 0.12,
+            shadowRadius: 4,
+          }}
+        >
+          {favoriteLoading ? (
+            <ActivityIndicator size="small" color="#E11D48" />
+          ) : (
+            <Text className="text-[25px]">
+              {isFavorite ? "❤️" : "♡"}
+            </Text>
+          )}
+        </Pressable>
+      </View>
 
       <View className="p-4">
         <View className="flex-row items-start justify-between">
@@ -97,7 +179,7 @@ export default function ListingCard({
             </Text>
           </View>
 
-          {(listing.facilities ?? []).slice(0, 3).map((facility) => (
+          {(listing.facilities ?? []).slice(0, 2).map((facility) => (
             <View
               key={facility}
               className="mr-2 rounded-full bg-[#F8FAFC] px-3 py-1.5"

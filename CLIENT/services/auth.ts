@@ -49,9 +49,13 @@ export async function getCurrentUser(): Promise<AuthUser> {
     throw new Error("No saved login session.");
   }
 
-  return getJson<AuthUser>("/api/v1/auth/me", 15000, {
-    Authorization: `Bearer ${token}`,
-  });
+  return getJson<AuthUser>(
+    "/api/v1/auth/me",
+    15000,
+    {
+      Authorization: `Bearer ${token}`,
+    }
+  );
 }
 
 export async function getSavedToken(): Promise<string | null> {
