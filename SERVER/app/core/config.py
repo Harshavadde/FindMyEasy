@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     UPLOAD_DIR: str = "uploads"
 
-    PUBLIC_BASE_URL: str = "http://192.168.0.10:8000"
+    PUBLIC_BASE_URL: str = "http://192.168.0.8:8000"
 
     MAX_IMAGE_SIZE_MB: int = 10
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { API_BASE_URL } from "../../../constants/api";
 import {
   ActivityIndicator,
   Alert,
@@ -39,12 +39,24 @@ type GalleryImage = {
 // Full https:// URLs (Cloudinary, S3, Supabase...) are used as they are.
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
-function resolveImageUrl(raw: string): string {
-  const url = raw.trim();
+function resolveImageUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
 
-  if (/^(https?:|file:|data:)/i.test(url)) return url;
+  try {
+    const parsed = new URL(url);
 
-  return API_BASE ? `${API_BASE}/${url.replace(/^\//, "")}` : url;
+    if (parsed.pathname.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${parsed.pathname}${parsed.search}`;
+    }
+
+    return url;
+  } catch {
+    if (url.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${url}`;
+    }
+
+    return undefined;
+  }
 }
 
 // Cleans the images saved by the owner: removes empty or duplicate URLs and
@@ -58,16 +70,20 @@ function buildGallery(
   (images ?? []).forEach((image: ListingImage, index: number) => {
     if (typeof image.url !== "string" || !image.url.trim()) return;
 
-    const url = resolveImageUrl(image.url);
+   
+const url = resolveImageUrl(image.url);
 
-    if (seen.has(url)) return;
-    seen.add(url);
+if (!url) return;
+if (seen.has(url)) return;
 
-    list.push({
-      key: `${image.id ?? "image"}-${index}`,
-      url,
-      isCover: image.image_type?.trim().toUpperCase() === "COVER",
-    });
+seen.add(url);
+
+list.push({
+  key: `${image.id ?? "image"}-${index}`,
+  url,
+  isCover: image.image_type?.trim().toUpperCase() === "COVER",
+});
+
   });
 
   const coverIndex = list.findIndex((item) => item.isCover);
@@ -524,6 +540,14 @@ export default function UserListingDetails() {
     await Linking.openURL(`https://wa.me/${phone}`);
   };
 
+  const handleBack = () => {
+  if (router.canGoBack()) {
+    router.back();
+  } else {
+    router.replace("/(user)/home");
+  }
+};
+
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center bg-[#F5F9FD]">
@@ -555,7 +579,7 @@ export default function UserListingDetails() {
         }}
       >
         {/* COVER IMAGE AND PROPERTY PHOTOS (from the owner's uploads) */}
-        <PropertyGallery images={gallery} onBack={() => router.back()} />
+        <PropertyGallery images={gallery} onBack={handleBack} />
 
         <View className="p-5">
           <View className="flex-row items-start justify-between">

@@ -25,7 +25,7 @@ def build_image_url(value: Any) -> str | None:
 
     becomes:
 
-        http://192.168.0.10:8000/uploads/listings/abc/image.jpg
+        http://192.168.0.8:8000/uploads/listings/abc/image.jpg
     """
 
     if value is None:

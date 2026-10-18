@@ -9,41 +9,47 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "../../contexts/AuthContext";
+
 
 export default function OwnerProfileScreen() {
+  const { logout } = useAuth();
+
   const [editing, setEditing] = useState(false);
+
   const [ownerName, setOwnerName] = useState("Property Owner");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
 
 
-  
-useEffect(() => {
-  async function loadProfile() {
-    try {
-      const saved = await AsyncStorage.getItem(
-        "findmyeasy_owner_profile"
-      );
 
-      if (saved) {
-        const profile = JSON.parse(saved);
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const saved = await AsyncStorage.getItem(
+          "findmyeasy_owner_profile"
+        );
 
-        setOwnerName(profile.name ?? "Property Owner");
-        setPhone(profile.phone ?? "");
-        setEmail(profile.email ?? "");
+        if (saved) {
+          const profile = JSON.parse(saved);
+
+          setOwnerName(profile.name ?? "Property Owner");
+          setPhone(profile.phone ?? "");
+          setEmail(profile.email ?? "");
+        }
+      } catch {
+        Alert.alert(
+          "Profile",
+          "Unable to load saved profile details."
+        );
       }
-    } catch {
-      Alert.alert(
-        "Profile",
-        "Unable to load saved profile details."
-      );
     }
-  }
 
-  loadProfile();
-}, []);
+    loadProfile();
+  }, []);
 
 
   function handleSave() {
@@ -134,14 +140,14 @@ useEffect(() => {
 
           <Pressable
             onPress={() =>
-            router.push({
+              router.push({
                 pathname: "/(owner)/edit-profile",
                 params: {
-                name: ownerName,
-                phone,
-                email,
+                  name: ownerName,
+                  phone,
+                  email,
                 },
-            })
+              })
             }
             className="mt-5 rounded-xl bg-[#2563EB] px-6 py-3"
           >
@@ -245,17 +251,39 @@ useEffect(() => {
           }
         />
 
+
         <ProfileRow
           icon="logout"
           title="Logout"
           subtitle="Sign out of your owner account"
-          onPress={() =>
+          onPress={() => {
             Alert.alert(
-              "Logout",
-              "Connect this action to your existing logout flow."
-            )
-          }
+              "Log out",
+              "Are you sure you want to log out of your owner account?",
+              [
+                {
+                  text: "Cancel",
+                  style: "cancel",
+                },
+                {
+                  text: "Log out",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await logout();
+                    } catch {
+                      Alert.alert(
+                        "Logout failed",
+                        "Unable to clear your saved session. Please try again."
+                      );
+                    }
+                  },
+                },
+              ]
+            );
+          }}
         />
+
       </ScrollView>
     </SafeAreaView>
   );

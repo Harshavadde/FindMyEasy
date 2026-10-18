@@ -6,6 +6,7 @@ from app.api.routes.auth import get_current_user
 from app.db.database import get_db
 from app.models.favorite import Favorite
 from app.models.listing import Listing
+from app.models.listing_image import ListingImage
 from app.models.user import User
 
 router = APIRouter(
@@ -91,12 +92,38 @@ def get_favorites(
         .all()
     )
 
-    return [
-        {
+    response = []
+
+    for favorite in favorites:
+        listing = favorite.listing
+
+        if listing is None:
+            continue
+
+        images = (
+            db.query(ListingImage)
+            .filter(ListingImage.listing_id == listing.id)
+            .all()
+        )
+
+        listing_data = {
+            column.name: getattr(listing, column.name)
+            for column in Listing.__table__.columns
+        }
+
+        listing_data["images"] = [
+            {
+                "id": image.id,
+                "image_type": image.image_type,
+                "url": image.image_url,
+            }
+            for image in images
+        ]
+
+        response.append({
             "listing_id": favorite.listing_id,
             "created_at": favorite.created_at,
-            "listing": favorite.listing,
-        }
-        for favorite in favorites
-        if favorite.listing is not None
-    ]
+            "listing": listing_data,
+        })
+
+    return response

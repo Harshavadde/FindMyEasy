@@ -11,6 +11,7 @@ import {
   Alert,
   Keyboard,
   Linking,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -801,6 +802,7 @@ export default function UserHome() {
     setSearchText,
   ] = useState("");
 
+
   const [
     searchFocused,
     setSearchFocused,
@@ -813,6 +815,8 @@ export default function UserHome() {
     useState<GenderFilter>(
       "All"
     );
+
+  const [pgFilterModalVisible, setPgFilterModalVisible] = useState(false);
 
   const [
     sortMode,
@@ -869,6 +873,8 @@ export default function UserHome() {
     locationLoading,
     setLocationLoading,
   ] = useState(false);
+
+
 
   /*
    * ==========================================================================
@@ -958,7 +964,113 @@ export default function UserHome() {
       ]
     );
 
+  const [draftPropertyType, setDraftPropertyType] = useState<"PG" | "Hostel">("PG");
+  const [draftCity, setDraftCity] = useState("");
+  const [draftAreas, setDraftAreas] = useState<string[]>([]);
+  const [draftTypes, setDraftTypes] = useState<string[]>([]);
+  const [draftSharing, setDraftSharing] = useState<string[]>([]);
+  const [draftAcTypes, setDraftAcTypes] = useState<string[]>([]);
+
+  const filterCities = [
+    "Hyderabad",
+    "Bengaluru",
+    "Chennai",
+    "Pune",
+    "Mumbai",
+  ];
+
+  const filterCityAreas: Record<string, string[]> = {
+    Hyderabad: [
+      "Madhapur", "Gachibowli", "Kondapur", "Hitech City",
+      "Kukatpally", "Ameerpet", "Begumpet", "Banjara Hills",
+      "Jubilee Hills", "Secunderabad",
+    ],
+    Bengaluru: [
+      "Whitefield", "Marathahalli", "Electronic City",
+      "Koramangala", "HSR Layout", "BTM Layout",
+      "Bellandur", "Indiranagar", "Yelahanka", "Hebbal",
+    ],
+    Chennai: [
+      "T Nagar", "Anna Nagar", "Velachery", "Guindy", "Adyar", "OMR",
+    ],
+    Pune: [
+      "Hinjewadi", "Wakad", "Baner", "Kharadi", "Viman Nagar", "Kothrud",
+    ],
+    Mumbai: [
+      "Andheri", "Powai", "Bandra", "Goregaon", "Thane", "Navi Mumbai",
+    ],
+  };
+
+  const filterSharingOptions = [
+    "Single Sharing",
+    "2 Sharing",
+    "3 Sharing",
+    "4 Sharing",
+    "5 Sharing",
+    "6 Sharing",
+    "7+ Sharing",
+  ];
+
+  const toggleDraftValue = (
+    value: string,
+    values: string[],
+    setter: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    setter(
+      values.includes(value)
+        ? values.filter((item) => item !== value)
+        : [...values, value]
+    );
+  };
+
+  const openPgFilters = () => {
+    setDraftPropertyType(
+      pgFilters?.propertyType === "Hostel" ? "Hostel" : "PG"
+    );
+    setDraftCity(pgFilters?.city ?? "");
+    setDraftAreas(pgFilters?.areas ?? []);
+    setDraftTypes(pgFilters?.types ?? []);
+    setDraftSharing(pgFilters?.sharing ?? []);
+    setDraftAcTypes(pgFilters?.acTypes ?? []);
+    setPgFilterModalVisible(true);
+  };
+
+  const applyPgFilters = () => {
+    if (!draftCity) {
+      Alert.alert("Select a city", "Please select a city to find PGs or hostels.");
+      return;
+    }
+
+    router.replace({
+      pathname: "/(user)/home",
+      params: {
+        pgSearch: "true",
+        propertyType: draftPropertyType,
+        pgCity: draftCity,
+        pgAreas: JSON.stringify(draftAreas),
+        pgTypes: JSON.stringify(draftTypes),
+        pgSharing: JSON.stringify(draftSharing),
+        pgAcTypes: JSON.stringify(draftAcTypes),
+      },
+    });
+
+    setPgFilterModalVisible(false);
+  };
+
+ const clearPgFilters = () => {
+  setSearchText("");
+  setNearbyMode("all");
+  setGenderFilter("All");
+  setSortMode("recommended");
+  setSearchFocused(false);
+
+  Keyboard.dismiss();
+
+  router.replace("/(user)/home");
+};
   /*
+
+  
    * ==========================================================================
    * LOAD LISTINGS
    * ==========================================================================
@@ -2202,56 +2314,112 @@ export default function UserHome() {
           Explore PGs and hostels from owners around you.
         </Text>
 
+
         {/* ================================================================
-            PG SEARCH ACTIVE INDICATOR
-        ================================================================ */}
+    PERMANENT PG PREFERENCES CARD
+================================================================ */}
 
-        {isPGSearch && (
-          <View className="mt-4 rounded-[16px] border border-[#BFDBFE] bg-[#EFF6FF] p-4">
+        <View className="mt-4 rounded-[16px] border border-[#BFDBFE] bg-white p-4">
+          {isPGSearch && pgFilters ? (
+            <>
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1 pr-3">
+                  <Text className="text-[11px] font-extrabold text-[#2563EB]">
+                    YOUR PREFERENCES
+                  </Text>
 
-            <View className="flex-row items-center justify-between">
+                  <Text className="mt-1 text-[17px] font-extrabold text-[#0F172A]">
+                    {pgFilters.city}
+                  </Text>
 
-              <View className="flex-1">
+                  <Text className="mt-1 text-[12px] text-[#64748B]">
+                    {pgFilters.propertyType}
+                    {" • "}
+                    {pgFilters.areas.length > 0
+                      ? pgFilters.areas.join(", ")
+                      : "All areas"}
+                  </Text>
+                </View>
 
-                <Text className="text-[12px] font-extrabold text-[#2563EB]">
-                  PG FILTERS APPLIED
-                </Text>
+                <Pressable
+                  onPress={() => {
+                    if (!pgFilters) return;
 
-                <Text className="mt-1 text-[13px] font-bold text-[#0F172A]">
-                  {pgFilters?.city}
-                </Text>
-
+                    router.push({
+                      pathname: "/(user)/PG",
+                      params: {
+                        filterMode: "edit",
+                        propertyType: pgFilters.propertyType,
+                        pgCity: pgFilters.city,
+                        pgAreas: JSON.stringify(pgFilters.areas),
+                        pgTypes: JSON.stringify(pgFilters.types),
+                        pgSharing: JSON.stringify(pgFilters.sharing),
+                        pgAcTypes: JSON.stringify(pgFilters.acTypes),
+                      },
+                    });
+                  }}
+                  className="rounded-full bg-[#EFF6FF] px-4 py-2.5"
+                >
+                  <Text className="text-[12px] font-bold text-[#2563EB]">
+                    Change
+                  </Text>
+                </Pressable>
               </View>
 
+              <Text className="mt-3 text-[12px] leading-5 text-[#64748B]">
+                {[
+                  ...pgFilters.types,
+                  ...pgFilters.sharing,
+                  ...pgFilters.acTypes,
+                ].join(" • ") || "No additional preferences selected"}
+              </Text>
+
               <Pressable
-                onPress={
-                  resetAll
-                }
-                className="rounded-full bg-white px-4 py-2"
+                onPress={clearPgFilters}
+                className="mt-3 self-start rounded-full border border-[#E2E8F0] px-4 py-2"
               >
-                <Text className="text-[11px] font-bold text-[#2563EB]">
-                  Clear
+                <Text className="text-[12px] font-bold text-[#475569]">
+                  Clear preferences
                 </Text>
               </Pressable>
+            </>
+          ) : (
+            <>
+              <Text className="text-[11px] font-extrabold uppercase text-[#2563EB]">
+                FIND A PLACE THAT FITS YOU
+              </Text>
 
-            </View>
+              <Text className="mt-2 text-[19px] font-extrabold text-[#0F172A]">
+                Find Your Perfect Stay
+              </Text>
 
-            <Text className="mt-2 text-[11px] leading-5 text-[#64748B]">
+              <Text className="mt-2 text-[12px] leading-5 text-[#64748B]">
+                Choose your city, preferred areas, sharing type and facilities to
+                discover PGs and hostels that match your needs.
+              </Text>
 
-              {pgFilters &&
-                pgFilters.areas.length >
-                0
-                ? `Areas: ${pgFilters.areas.join(", ")}`
-                : "All areas in selected city"}
-
-            </Text>
-
-          </View>
-        )}
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/(user)/PG",
+                    params: { filterMode: "new" },
+                  })
+                }
+                className="mt-4 items-center rounded-full bg-[#2563EB] px-5 py-3.5"
+              >
+                <Text className="text-[13px] font-extrabold text-white">
+                  Find PG
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </View>
 
         {/* ================================================================
             SEARCH BAR
-        ================================================================ */}
+        =======================================================
+        
+        ========= */}
 
         <View
           className={`mt-5 flex-row items-center rounded-[18px] bg-white px-4 ${searchFocused
@@ -2873,9 +3041,7 @@ export default function UserHome() {
           )}
 
         </View>
-
       </ScrollView>
-
     </View>
   );
 }

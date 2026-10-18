@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../contexts/AuthContext";
 import { loginUser } from "../../services/auth";
 
 const COLORS = {
@@ -28,6 +29,7 @@ const COLORS = {
 };
 
 export default function Login() {
+  const { completeLogin } = useAuth();
   const { role } = useLocalSearchParams<{
     role?: "user" | "owner";
   }>();
@@ -64,16 +66,19 @@ export default function Login() {
     try {
       setLoading(true);
 
+
       const result = await loginUser({
         email: normalizedEmail,
         password,
       });
 
-      // console.log("FindEasy access token:", result?.access_token);
+      // Save the selected role and update the in-memory session.
+      await completeLogin(result.user, role);
+
       if (role === "owner") {
         router.replace("/(owner)");
       } else {
-        router.replace("/(user)/PG");
+        router.replace("/(user)/home");
       }
     } catch (error) {
       setErrorMessage(

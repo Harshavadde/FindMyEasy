@@ -13,9 +13,12 @@ from app.models.user import User
 from app.schemas.auth import (
     AuthResponse,
     LoginRequest,
+    ProfileUpdateRequest,
     RegisterRequest,
     UserResponse,
 )
+
+
 
 router = APIRouter(
     prefix="/api/v1/auth",
@@ -163,4 +166,24 @@ def login(
 def get_me(
     current_user: User = Depends(get_current_user),
 ):
+    return UserResponse.model_validate(current_user)
+
+@router.patch("/me", response_model=UserResponse)
+def update_me(
+    data: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.full_name = data.full_name
+
+    try:
+        db.commit()
+        db.refresh(current_user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to update your profile. Please try again.",
+        )
+
     return UserResponse.model_validate(current_user)

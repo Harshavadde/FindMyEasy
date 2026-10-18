@@ -188,6 +188,13 @@ class Listing(Base):
     back_populates="listing",
     cascade="all, delete-orphan",
 )
+    
+    # images = relationship(
+    #     "ListingImage",
+    #     primaryjoin="Listing.id == foreign(ListingImage.listing_id)",
+    #     cascade="all, delete-orphan",
+    #     lazy="selectin",
+    # )
 
     def __repr__(self) -> str:
         return (

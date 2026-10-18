@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../constants/api";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +20,28 @@ type Props = {
   listing: Listing;
   onPress?: () => void;
 };
+
+function getReachableImageUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+
+  try {
+    const parsed = new URL(url);
+
+    // Uploaded images should use the current API server,
+    // even if the database contains an old IP address.
+    if (parsed.pathname.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${parsed.pathname}${parsed.search}`;
+    }
+
+    return url;
+  } catch {
+    if (url.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${url}`;
+    }
+
+    return undefined;
+  }
+}
 
 export default function ListingCard({
   listing,
@@ -75,6 +98,10 @@ export default function ListingCard({
       (image) => image.image_type?.toUpperCase() === "COVER"
     ) ?? listing.images?.[0];
 
+  const coverImageUrl = getReachableImageUrl(coverImage?.url);
+
+  console.log("FindEasy cover image URL:", coverImage?.url);
+
   return (
     <Pressable
       onPress={onPress}
@@ -85,11 +112,18 @@ export default function ListingCard({
       }}
     >
       <View>
-        {coverImage?.url ? (
+        {coverImageUrl ? (
           <Image
-            source={{ uri: coverImage.url }}
+            source={{ uri: coverImageUrl }}
             className="h-[190px] w-full"
             resizeMode="cover"
+            onError={(event) => {
+              console.log(
+                "FindEasy image load failed:",
+                event.nativeEvent.error
+              );
+              console.log("Image URL:", coverImageUrl);
+            }}
           />
         ) : (
           <View className="h-[190px] w-full items-center justify-center bg-[#EAF2FF]">

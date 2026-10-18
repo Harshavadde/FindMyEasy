@@ -7,7 +7,7 @@ import Constants from "expo-constants";
  * 3. Manual fallback below
  */
 const API_PORT = 8000;
-const FALLBACK_LAN_IP = "192.168.0.10";
+const FALLBACK_LAN_IP = "192.168.0.8";
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 

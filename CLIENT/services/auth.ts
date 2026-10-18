@@ -1,8 +1,11 @@
 
 import * as SecureStore from "expo-secure-store";
-import { postJson, getJson } from "../constants/api";
+import { API_BASE_URL, getJson, postJson } from "../constants/api";
 
 const TOKEN_KEY = "findeasy_access_token";
+const ROLE_KEY = "findeasy_user_role";
+
+export type UserRole = "user" | "owner";
 
 export type AuthUser = {
   id: string;
@@ -21,47 +24,88 @@ export async function registerUser(data: {
   email: string;
   password: string;
 }): Promise<AuthResponse> {
-  const result = await postJson<AuthResponse>(
-    "/api/v1/auth/register",
-    data
-  );
-
-  return result;
+  return postJson<AuthResponse>("/api/v1/auth/register", data);
 }
 
 export async function loginUser(data: {
   email: string;
   password: string;
 }): Promise<AuthResponse> {
-  const result = await postJson<AuthResponse>(
-    "/api/v1/auth/login",
-    data
-  );
-
+  const result = await postJson<AuthResponse>("/api/v1/auth/login", data);
   await SecureStore.setItemAsync(TOKEN_KEY, result.access_token);
   return result;
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const token = await getSavedToken();
 
   if (!token) {
     throw new Error("No saved login session.");
   }
 
-  return getJson<AuthUser>(
-    "/api/v1/auth/me",
-    15000,
-    {
-      Authorization: `Bearer ${token}`,
-    }
-  );
+  return getJson<AuthUser>("/api/v1/auth/me", 15000, {
+    Authorization: `Bearer ${token}`,
+  });
 }
 
 export async function getSavedToken(): Promise<string | null> {
   return SecureStore.getItemAsync(TOKEN_KEY);
 }
 
+export async function saveUserRole(role: UserRole): Promise<void> {
+  await SecureStore.setItemAsync(ROLE_KEY, role);
+}
+
+export async function getSavedUserRole(): Promise<UserRole | null> {
+  const value = await SecureStore.getItemAsync(ROLE_KEY);
+  return value === "user" || value === "owner" ? value : null;
+}
+
 export async function logoutUser(): Promise<void> {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(ROLE_KEY);
+}
+
+export async function updateCurrentUser(fullName: string): Promise<AuthUser> {
+  const token = await getSavedToken();
+
+  if (!token) {
+    throw new Error("Please log in to update your profile.");
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+      method: "PATCH",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ full_name: fullName.trim() }),
+    });
+  } catch {
+    throw new Error("Unable to reach the server. Please try again.");
+  }
+
+  const raw = await response.text();
+  let data: any = null;
+
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    // Keep data null if the server response is not JSON.
+  }
+
+  if (!response.ok) {
+    const detail =
+      typeof data?.detail === "string"
+        ? data.detail
+        : "Unable to update your profile.";
+
+    throw new Error(detail);
+  }
+
+  return data as AuthUser;
 }

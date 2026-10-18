@@ -87,10 +87,10 @@ export default function Signup() {
 
 
             await registerUser({
+                full_name: fullName.trim(),
                 email: normalizedEmail,
                 password,
             });
-
             setPassword("");
             setConfirmPassword("");
 
