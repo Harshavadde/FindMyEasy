@@ -11,6 +11,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    type TextInputInstance,
     View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -32,9 +33,9 @@ export default function Signup() {
         role?: "user" | "owner";
     }>();
 
-    const emailRef = useRef<TextInput>(null);
-    const passwordRef = useRef<TextInput>(null);
-    const confirmPasswordRef = useRef<TextInput>(null);
+    const emailRef = useRef<TextInputInstance>(null);
+    const passwordRef = useRef<TextInputInstance>(null);
+    const confirmPasswordRef = useRef<TextInputInstance>(null);
 
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
