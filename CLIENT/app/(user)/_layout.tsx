@@ -4,10 +4,13 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 const ACTIVE_COLOR = "#2563EB";
 const INACTIVE_COLOR = "#64748B";
 
+export const unstable_settings = {
+  initialRouteName: "home",
+};
+
 export default function UserLayout() {
   return (
     <Tabs
-      initialRouteName="home"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: ACTIVE_COLOR,
@@ -31,10 +34,10 @@ export default function UserLayout() {
         name="home"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ focused, size }) => (
             <MaterialCommunityIcons
               name="home-variant-outline"
-              color={color}
+              color={focused ? ACTIVE_COLOR : INACTIVE_COLOR}
               size={size}
             />
           ),
@@ -45,10 +48,10 @@ export default function UserLayout() {
         name="search"
         options={{
           title: "Search",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ focused, size }) => (
             <MaterialCommunityIcons
               name="magnify"
-              color={color}
+              color={focused ? ACTIVE_COLOR : INACTIVE_COLOR}
               size={size}
             />
           ),
@@ -59,10 +62,10 @@ export default function UserLayout() {
         name="favorites"
         options={{
           title: "Favorites",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ focused, size }) => (
             <MaterialCommunityIcons
               name="heart-outline"
-              color={color}
+              color={focused ? ACTIVE_COLOR : INACTIVE_COLOR}
               size={size}
             />
           ),
@@ -73,10 +76,10 @@ export default function UserLayout() {
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ focused, size }) => (
             <MaterialCommunityIcons
               name="account-circle-outline"
-              color={color}
+              color={focused ? ACTIVE_COLOR : INACTIVE_COLOR}
               size={size}
             />
           ),

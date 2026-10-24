@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 
@@ -61,7 +62,7 @@ export default function UserSearch() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance | null>(null);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadListings = useCallback(async () => {
