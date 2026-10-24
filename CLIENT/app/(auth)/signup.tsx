@@ -33,9 +33,9 @@ export default function Signup() {
         role?: "user" | "owner";
     }>();
 
-    const emailRef = useRef<TextInputInstance | null>(null);
-    const passwordRef = useRef<TextInputInstance | null>(null);
-    const confirmPasswordRef = useRef<TextInputInstance | null>(null);
+    const emailRef = useRef<TextInputInstance>(null);
+    const passwordRef = useRef<TextInputInstance>(null);
+    const confirmPasswordRef = useRef<TextInputInstance>(null);
 
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");

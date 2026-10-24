@@ -35,7 +35,7 @@ export default function Login() {
     role?: "user" | "owner";
   }>();
 
-  const passwordRef = useRef<TextInputInstance | null>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
