@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -34,7 +35,7 @@ export default function Login() {
     role?: "user" | "owner";
   }>();
 
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance | null>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
