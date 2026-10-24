@@ -17,7 +17,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  type TextInputInstance,
   View,
 } from "react-native";
 
@@ -834,7 +833,7 @@ export default function UserHome() {
    */
 
   const inputRef =
-    useRef<TextInputInstance | null>(null);
+    useRef<TextInput>(null);
 
   const blurTimer =
     useRef<
