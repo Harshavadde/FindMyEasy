@@ -103,7 +103,7 @@ def register(
     user = User(
         email=email,
         password_hash=hash_password(data.password),
-        full_name=data.full_name.strip() if data.full_name else None,
+        full_name=data.full_name,
     )
 
     db.add(user)
@@ -175,6 +175,7 @@ def update_me(
     db: Session = Depends(get_db),
 ):
     current_user.full_name = data.full_name
+    current_user.phone = data.phone
 
     try:
         db.commit()

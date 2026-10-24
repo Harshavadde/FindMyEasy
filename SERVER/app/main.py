@@ -3,6 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from app.api.routes.listings import router as listings_router
 
 from app.core.config import settings
@@ -35,6 +36,12 @@ os.makedirs(
 Base.metadata.create_all(
     bind=engine,
 )
+
+# Add the optional profile phone field to existing PostgreSQL databases.
+with engine.begin() as connection:
+    connection.execute(
+        text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(10)")
+    )
 
 
 # ---------------------------------------------------------------------------

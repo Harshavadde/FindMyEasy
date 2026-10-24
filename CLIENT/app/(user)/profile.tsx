@@ -137,9 +137,6 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.heading}>My Profile</Text>
-        <Text style={styles.subtitle}>
-          Manage your FindEasy account
-        </Text>
 
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
@@ -192,6 +189,24 @@ export default function ProfileScreen() {
               <Text style={styles.detailValue}>{user.email}</Text>
             </View>
           </View>
+
+          <View style={styles.separator} />
+
+          <View style={styles.detailRow}>
+            <View style={styles.iconBox}>
+              <MaterialCommunityIcons
+                name="phone-outline"
+                size={22}
+                color="#2563EB"
+              />
+            </View>
+            <View style={styles.detailContent}>
+              <Text style={styles.detailLabel}>Phone number</Text>
+              <Text style={styles.detailValue}>
+                {user.phone ? `+91 ${user.phone}` : "Not provided"}
+              </Text>
+            </View>
+          </View>
         </View>
 
         <Pressable
@@ -227,7 +242,6 @@ export default function ProfileScreen() {
           )}
         </Pressable>
 
-        <Text style={styles.footer}>FindEasy · Your next stay starts here</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -237,13 +251,8 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
   content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24 },
   heading: { fontSize: 27, fontWeight: "800", color: "#0F172A" },
-  subtitle: { fontSize: 14, color: "#64748B", marginTop: 5, marginBottom: 22 },
   profileCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 22,
+    paddingVertical: 22,
     alignItems: "center",
   },
   avatar: {
@@ -309,5 +318,4 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC", padding: 24 },
   muted: { color: "#64748B", marginTop: 12 },
   errorText: { color: "#DC2626", textAlign: "center", marginTop: 12 },
-  footer: { color: "#94A3B8", textAlign: "center", fontSize: 12, marginTop: 24 },
 });

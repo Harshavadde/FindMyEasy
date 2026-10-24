@@ -154,7 +154,9 @@ export default function Signup() {
                         </Text>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>Full name</Text>
+                            <Text style={styles.label}>
+                                Full name <Text style={styles.requiredMarker}>*</Text>
+                            </Text>
                             <TextInput
                                 style={styles.input}
                                 placeholder="Enter your full name"
@@ -398,6 +400,9 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         color: COLORS.text,
         marginBottom: 8,
+    },
+    requiredMarker: {
+        color: COLORS.error,
     },
     input: {
         height: 52,

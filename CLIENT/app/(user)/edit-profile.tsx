@@ -22,6 +22,7 @@ import {
 export default function EditProfileScreen() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,6 +40,7 @@ export default function EditProfileScreen() {
           const user = await getCurrentUser();
           if (active) {
             setFullName(user.full_name ?? "");
+            setPhone(user.phone ?? "");
             setEmail(user.email);
           }
         } catch (err) {
@@ -75,14 +77,20 @@ export default function EditProfileScreen() {
       return;
     }
 
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone && !/^[6-9]\d{9}$/.test(trimmedPhone)) {
+      setError("Enter a valid 10-digit Indian mobile number starting with 6-9.");
+      return;
+    }
+
     if (saving) return;
 
     setSaving(true);
     setError("");
 
     try {
-      await updateCurrentUser(trimmedName);
-      Alert.alert("Profile updated", "Your name has been updated successfully.", [
+      await updateCurrentUser(trimmedName, trimmedPhone || null);
+      Alert.alert("Profile updated", "Your profile has been updated successfully.", [
         {
           text: "OK",
           onPress: () => router.replace("/(user)/profile"),
@@ -136,7 +144,9 @@ export default function EditProfileScreen() {
           </Text>
 
           <View style={styles.card}>
-            <Text style={styles.label}>Full name</Text>
+            <Text style={styles.label}>
+              Full name <Text style={styles.requiredMarker}>*</Text>
+            </Text>
             <TextInput
               style={styles.input}
               value={fullName}
@@ -155,6 +165,31 @@ export default function EditProfileScreen() {
             />
             <Text style={styles.counter}>
               {fullName.length}/150 characters
+            </Text>
+
+            <Text style={[styles.label, styles.phoneLabel]}>
+              Phone number <Text style={styles.optionalMarker}>(optional)</Text>
+            </Text>
+            <View style={styles.phoneInputContainer}>
+              <Text style={styles.countryCode}>+91</Text>
+              <TextInput
+                style={styles.phoneInput}
+                value={phone}
+                onChangeText={(value) => {
+                  setPhone(value.replace(/\D/g, "").slice(0, 10));
+                  setError("");
+                }}
+                placeholder="10-digit mobile number"
+                placeholderTextColor="#94A3B8"
+                keyboardType="number-pad"
+                maxLength={10}
+                editable={!saving}
+                returnKeyType="done"
+                accessibilityLabel="Optional Indian phone number"
+              />
+            </View>
+            <Text style={styles.hint}>
+              Enter a 10-digit Indian mobile number beginning with 6, 7, 8, or 9.
             </Text>
 
             <Text style={[styles.label, styles.emailLabel]}>
@@ -236,6 +271,8 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   label: { fontSize: 14, fontWeight: "700", color: "#0F172A", marginBottom: 9 },
+  requiredMarker: { color: "#DC2626" },
+  optionalMarker: { color: "#64748B", fontSize: 12, fontWeight: "400" },
   input: {
     height: 52,
     borderWidth: 1,
@@ -247,6 +284,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   counter: { textAlign: "right", color: "#94A3B8", fontSize: 12, marginTop: 7 },
+  phoneLabel: { marginTop: 22 },
+  phoneInputContainer: {
+    height: 52,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  countryCode: {
+    color: "#334155",
+    fontSize: 15,
+    fontWeight: "600",
+    paddingRight: 12,
+    borderRightWidth: 1,
+    borderRightColor: "#CBD5E1",
+  },
+  phoneInput: {
+    flex: 1,
+    height: "100%",
+    paddingLeft: 12,
+    color: "#0F172A",
+    fontSize: 15,
+  },
   emailLabel: { marginTop: 25 },
   readOnlyField: {
     minHeight: 52,

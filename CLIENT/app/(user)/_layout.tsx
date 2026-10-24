@@ -42,6 +42,20 @@ export default function UserLayout() {
       />
 
       <Tabs.Screen
+        name="search"
+        options={{
+          title: "Search",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons
+              name="magnify"
+              color={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="favorites"
         options={{
           title: "Favorites",
@@ -69,10 +83,9 @@ export default function UserLayout() {
         }}
       />
 
-      {/* Search and detail routes are not bottom tabs. */}
+      {/* Detail routes are not bottom tabs. */}
       <Tabs.Screen name="PG" options={{ href: null }} />
       <Tabs.Screen name="filters" options={{ href: null }} />
-      <Tabs.Screen name="search" options={{ href: null }} />
       <Tabs.Screen name="listing/[id]" options={{ href: null }} />
       <Tabs.Screen
         name="selectyourFinding/category"

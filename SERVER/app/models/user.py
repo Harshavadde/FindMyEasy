@@ -32,6 +32,11 @@ class User(Base):
         nullable=True,
     )
 
+    phone = Column(
+        String(10),
+        nullable=True,
+    )
+
     is_active = Column(
         Boolean,
         nullable=False,

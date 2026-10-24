@@ -11,6 +11,7 @@ export type AuthUser = {
   id: string;
   email: string;
   full_name: string | null;
+  phone: string | null;
 };
 
 export type AuthResponse = {
@@ -20,7 +21,7 @@ export type AuthResponse = {
 };
 
 export async function registerUser(data: {
-  full_name?: string;
+  full_name: string;
   email: string;
   password: string;
 }): Promise<AuthResponse> {
@@ -66,7 +67,10 @@ export async function logoutUser(): Promise<void> {
   await SecureStore.deleteItemAsync(ROLE_KEY);
 }
 
-export async function updateCurrentUser(fullName: string): Promise<AuthUser> {
+export async function updateCurrentUser(
+  fullName: string,
+  phone: string | null
+): Promise<AuthUser> {
   const token = await getSavedToken();
 
   if (!token) {
@@ -83,7 +87,10 @@ export async function updateCurrentUser(fullName: string): Promise<AuthUser> {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ full_name: fullName.trim() }),
+      body: JSON.stringify({
+        full_name: fullName.trim(),
+        phone,
+      }),
     });
   } catch {
     throw new Error("Unable to reach the server. Please try again.");
