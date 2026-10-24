@@ -8,9 +8,9 @@ import {
   Pressable,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import ListingCard from "../../components/ListingCard";
-import { getFavoriteListings } from "../../services/favorites";
-import type { Listing } from "../../types/listing";
+import ListingCard from "../../../components/ListingCard";
+import { getFavoriteListings } from "../../../services/favorites";
+import type { Listing } from "../../../types/listing";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function FavoritesScreen() {

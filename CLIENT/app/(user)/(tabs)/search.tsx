@@ -14,9 +14,9 @@ import {
 
 import { router } from "expo-router";
 
-import ListingCard from "../../components/ListingCard";
-import { getPublicListings } from "../../services/api";
-import type { Listing } from "../../types/listing";
+import ListingCard from "../../../components/ListingCard";
+import { getPublicListings } from "../../../services/api";
+import type { Listing } from "../../../types/listing";
 
 type SuggestionType = "property" | "area" | "city";
 

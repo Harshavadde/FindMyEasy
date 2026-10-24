@@ -8,12 +8,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../../contexts/AuthContext";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { getCurrentUser, logoutUser } from "../../services/auth";
-import type { AuthUser } from "../../services/auth";
+import { getCurrentUser, logoutUser } from "../../../services/auth";
+import type { AuthUser } from "../../../services/auth";
 
 export default function ProfileScreen() {
   const router = useRouter();
