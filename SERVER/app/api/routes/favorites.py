@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.routes.auth import get_current_user
@@ -67,14 +67,9 @@ def remove_favorite(
         Favorite.listing_id == listing_id,
     ).first()
 
-    if not favorite:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Favorite not found.",
-        )
-
-    db.delete(favorite)
-    db.commit()
+    if favorite:
+        db.delete(favorite)
+        db.commit()
 
     return {"message": "Removed from favorites."}
 

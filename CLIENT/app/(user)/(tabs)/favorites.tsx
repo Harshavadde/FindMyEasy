@@ -163,6 +163,17 @@ export default function FavoritesScreen() {
             <ListingCard
               listing={item}
               onPress={() => openListing(item)}
+              onFavoriteChange={(isFavorite) => {
+                if (isFavorite) {
+                  void loadFavorites();
+                } else {
+                  setFavorites((current) =>
+                    current.filter(
+                      (favorite) => String(favorite.id) !== String(item.id)
+                    )
+                  );
+                }
+              }}
             />
           )}
           contentContainerStyle={styles.listContent}
