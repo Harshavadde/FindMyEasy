@@ -11,6 +11,7 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { router } from "expo-router";
 
@@ -179,7 +180,7 @@ export default function UserSearch() {
   const showSuggestions = searchFocused && query.trim().length > 0;
 
   return (
-    <View className="flex-1 bg-[#F5F9FD]">
+    <SafeAreaView className="flex-1 bg-[#F5F9FD]" edges={["top"]}>
       <FlatList
         data={results}
         keyExtractor={(item) => String(item.id)}
@@ -189,7 +190,7 @@ export default function UserSearch() {
         }
         contentContainerStyle={{
           paddingHorizontal: 20,
-          paddingTop: 55,
+          paddingTop: 12,
           paddingBottom: 40,
           flexGrow: 1,
         }}
@@ -386,6 +387,6 @@ export default function UserSearch() {
           )
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }

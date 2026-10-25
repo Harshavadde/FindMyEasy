@@ -20,6 +20,7 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import * as Location from "expo-location";
 
@@ -2275,7 +2276,7 @@ export default function UserHome() {
    */
 
   return (
-    <View className="flex-1 bg-[#F5F9FD]">
+    <SafeAreaView className="flex-1 bg-[#F5F9FD]" edges={["top"]}>
 
       <ScrollView
         showsVerticalScrollIndicator={
@@ -2294,7 +2295,7 @@ export default function UserHome() {
         }
         contentContainerStyle={{
           paddingHorizontal: 20,
-          paddingTop: 55,
+          paddingTop: 12,
           paddingBottom: 40,
         }}
       >
@@ -2968,6 +2969,6 @@ export default function UserHome() {
 
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
