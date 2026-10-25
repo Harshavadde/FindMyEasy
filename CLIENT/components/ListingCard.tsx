@@ -14,7 +14,7 @@ import { useFavoritesStore } from "../store/favoritesStore";
 type Props = {
   listing: Listing;
   onPress?: () => void;
-  onFavoriteChange?: (isFavorite: boolean) => void;
+  onRemoveFavorite?: () => void;
 };
 
 function getReachableImageUrl(url?: string | null): string | undefined {
@@ -42,12 +42,13 @@ function getReachableImageUrl(url?: string | null): string | undefined {
 export default function ListingCard({
   listing,
   onPress,
-  onFavoriteChange,
+  onRemoveFavorite,
 }: Props) {
   const listingId = String(listing.id);
-  const isFavorite = useFavoritesStore((state) =>
+  const storedIsFavorite = useFavoritesStore((state) =>
     state.favoriteIds.has(listingId)
   );
+  const isFavorite = Boolean(onRemoveFavorite) || storedIsFavorite;
   const favoriteLoading = useFavoritesStore((state) =>
     state.pendingIds.has(listingId)
   );
@@ -64,14 +65,14 @@ export default function ListingCard({
 
   const toggleFavorite = async () => {
     if (favoriteLoading) return;
+    if (onRemoveFavorite) {
+      onRemoveFavorite();
+      return;
+    }
 
-    const nextIsFavorite = !isFavorite;
     try {
-      const update = toggleFavoriteInStore(listingId);
-      onFavoriteChange?.(nextIsFavorite);
-      await update;
+      await toggleFavoriteInStore(listingId, listing);
     } catch (error) {
-      onFavoriteChange?.(isFavorite);
       Alert.alert(
         "Favorites",
         error instanceof Error

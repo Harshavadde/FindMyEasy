@@ -66,10 +66,10 @@ export default function UserSearch() {
   const inputRef = useRef<TextInputInstance | null>(null);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadListings = useCallback(async () => {
+  const loadListings = useCallback(async (forceRefresh = false) => {
     setLoadError(null);
     try {
-      const data = await getPublicListings();
+      const data = await getPublicListings({ forceRefresh });
       setListings(data);
     } catch (error) {
       console.error("Search listings error:", error);
@@ -174,7 +174,7 @@ export default function UserSearch() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    void loadListings();
+    void loadListings(true);
   };
 
   const showSuggestions = searchFocused && query.trim().length > 0;

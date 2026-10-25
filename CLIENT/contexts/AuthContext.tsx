@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiError } from "../constants/api";
+import { getPublicListings } from "../services/api";
 import {
   getCurrentUser,
   getSavedToken,
@@ -36,6 +37,12 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function preloadUserListings() {
+  void getPublicListings().catch((error: unknown) => {
+    console.warn("Unable to preload listings:", error);
+  });
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -56,6 +63,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // A missing role can occur for a session created before role persistence.
       const savedRole = await getSavedUserRole();
+      if (savedRole !== "owner") {
+        preloadUserListings();
+      }
       const currentUser = await getCurrentUser();
 
       setUser(currentUser);
@@ -86,6 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const completeLogin = useCallback(
     async (loggedInUser: AuthUser, selectedRole: UserRole) => {
       await saveUserRole(selectedRole);
+      if (selectedRole === "user") {
+        preloadUserListings();
+      }
       setUser(loggedInUser);
       setRole(selectedRole);
       setStatus("authenticated");

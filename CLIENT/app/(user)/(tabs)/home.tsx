@@ -1087,14 +1087,14 @@ export default function UserHome() {
 
   const loadListings =
     useCallback(
-      async () => {
+      async (forceRefresh = false) => {
 
         try {
 
           setLoadError(null);
 
           const data =
-            await getPublicListings();
+            await getPublicListings({ forceRefresh });
 
           setListings(data);
 
@@ -1168,7 +1168,7 @@ export default function UserHome() {
 
       setRefreshing(true);
 
-      loadListings();
+      loadListings(true);
     };
 
   /*
@@ -1182,7 +1182,7 @@ export default function UserHome() {
 
       setLoading(true);
 
-      loadListings();
+      loadListings(true);
     };
 
   /*

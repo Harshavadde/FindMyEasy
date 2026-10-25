@@ -66,6 +66,13 @@ async function request<T>(
   return data as T;
 }
 
+const PUBLIC_LISTINGS_CACHE_MS = 30_000;
+const publicListingsCache = new Map<
+  string,
+  { listings: Listing[]; cachedAt: number }
+>();
+const publicListingsRequests = new Map<string, Promise<Listing[]>>();
+
 export type PublicListingsResponse = {
   success: boolean;
   count: number;
@@ -80,6 +87,7 @@ export async function getPublicListings(
     gender?: string;
     min_price?: number;
     max_price?: number;
+    forceRefresh?: boolean;
   } = {}
 ): Promise<Listing[]> {
   const searchParams = new URLSearchParams();
@@ -127,13 +135,39 @@ export async function getPublicListings(
   }
 
   const query = searchParams.toString();
+  const cacheKey = `/api/v1/listings${query ? `?${query}` : ""}`;
+  const forceRefresh = params.forceRefresh ?? false;
+  const cachedResult = publicListingsCache.get(cacheKey);
 
-  const result =
-    await request<PublicListingsResponse>(
-      `/api/v1/listings${query ? `?${query}` : ""}`
-    );
+  if (
+    !forceRefresh &&
+    cachedResult &&
+    Date.now() - cachedResult.cachedAt < PUBLIC_LISTINGS_CACHE_MS
+  ) {
+    return Promise.resolve(cachedResult.listings);
+  }
 
-  return result.listings;
+  if (!forceRefresh) {
+    const pendingRequest = publicListingsRequests.get(cacheKey);
+    if (pendingRequest) return pendingRequest;
+  }
+
+  const listingsRequest = request<PublicListingsResponse>(cacheKey)
+    .then((result) => {
+      publicListingsCache.set(cacheKey, {
+        listings: result.listings,
+        cachedAt: Date.now(),
+      });
+      return result.listings;
+    })
+    .finally(() => {
+      if (publicListingsRequests.get(cacheKey) === listingsRequest) {
+        publicListingsRequests.delete(cacheKey);
+      }
+    });
+
+  publicListingsRequests.set(cacheKey, listingsRequest);
+  return listingsRequest;
 }
 
 export async function getPublicListing(

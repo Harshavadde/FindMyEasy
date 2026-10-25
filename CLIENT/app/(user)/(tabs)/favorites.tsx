@@ -1,7 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   ActivityIndicator,
   FlatList,
+  Modal,
   StyleSheet,
   Text,
   View,
@@ -12,110 +14,92 @@ import ListingCard from "../../../components/ListingCard";
 import { getFavoriteListings } from "../../../services/favorites";
 import type { Listing } from "../../../types/listing";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFavoritesStore } from "../../../store/favoritesStore";
 
 export default function FavoritesScreen() {
   const router = useRouter();
 
-  const [favorites, setFavorites] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedItemToDelete, setSelectedItemToDelete] =
+    useState<Listing | null>(null);
+  const hasLoadedFavorites = useRef(false);
+  const lastFetchedAt = useRef(0);
+  const favorites = useFavoritesStore((state) => state.favoriteListings);
+  const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
+  const setFavoriteIds = useFavoritesStore((state) => state.setFavoriteIds);
+  const setFavoriteListings = useFavoritesStore(
+    (state) => state.setFavoriteListings
+  );
 
-  const loadFavorites = useCallback(async () => {
-    let active = true;
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const data = await getFavoriteListings();
-      console.log(
-        "Favorite cover images:",
-        JSON.stringify(
-          data.map((listing) => ({
-            name: listing.name,
-            images: listing.images,
-          })),
-          null,
-          2
-        )
-      );
-
-      if (active) {
-        setFavorites(data);
-      }
-    } catch (err) {
-      if (active) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load your favorite PGs."
+  const loadFavorites = useCallback(
+    async (showLoading: boolean) => {
+      if (showLoading) setLoading(true);
+      setError("");
+      try {
+        const data = await getFavoriteListings();
+        console.log(
+          "Favorite cover images:",
+          JSON.stringify(
+            data.map((listing) => ({
+              name: listing.name,
+              images: listing.images,
+            })),
+            null,
+            2
+          )
         );
-      }
-    } finally {
-      if (active) {
+
+        setFavoriteIds(data.map((listing) => String(listing.id)));
+        setFavoriteListings(data);
+        hasLoadedFavorites.current = true;
+        lastFetchedAt.current = Date.now();
+      } catch (err) {
+        if (!hasLoadedFavorites.current) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load your favorite PGs."
+          );
+        }
+      } finally {
         setLoading(false);
       }
-    }
+    },
+    [setFavoriteIds, setFavoriteListings]
+  );
 
-    return () => {
-      active = false;
-    };
-  }, []);
+  useEffect(() => {
+    void loadFavorites(true);
+  }, [loadFavorites]);
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-
-      const fetchFavorites = async () => {
-        setLoading(true);
-        setError("");
-
-        try {
-          const data = await getFavoriteListings();
-
-          console.log(
-            "FindEasy favorite image data:",
-            JSON.stringify(
-              data.map((listing) => ({
-                id: listing.id,
-                name: listing.name,
-                images: listing.images,
-              })),
-              null,
-              2
-            )
-          );
-
-          if (active) {
-            setFavorites(data);
-          }
-        } catch (err) {
-          if (active) {
-            setError(
-              err instanceof Error
-                ? err.message
-                : "Unable to load your favorite PGs."
-            );
-          }
-        } finally {
-          if (active) {
-            setLoading(false);
-          }
-        }
-      };
-
-      void fetchFavorites();
-
-      return () => {
-        active = false;
-      };
-    }, [])
+      if (Date.now() - lastFetchedAt.current > 2_000) {
+        void loadFavorites(false);
+      }
+    }, [loadFavorites])
   );
 
   const openListing = (listing: Listing) => {
     router.push({
       pathname: "/(user)/listing/[id]",
       params: { id: listing.id },
+    });
+  };
+
+  const confirmRemoveFavorite = () => {
+    const listing = selectedItemToDelete;
+    if (!listing) return;
+
+    setSelectedItemToDelete(null);
+    void toggleFavorite(String(listing.id), listing).catch((err: unknown) => {
+      Alert.alert(
+        "Favorites",
+        err instanceof Error
+          ? err.message
+          : "Unable to update favorites. Please try again."
+      );
     });
   };
 
@@ -129,19 +113,19 @@ export default function FavoritesScreen() {
         PGs and hostels you have saved
       </Text>
 
-      {loading ? (
+      {loading && favorites.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.message}>Loading your favorites...</Text>
         </View>
-      ) : error ? (
+      ) : error && favorites.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.error}>{error}</Text>
 
           <Pressable
             style={styles.retryButton}
             onPress={() => {
-              void loadFavorites();
+              void loadFavorites(true);
             }}
           >
             <Text style={styles.retryText}>Try Again</Text>
@@ -163,23 +147,43 @@ export default function FavoritesScreen() {
             <ListingCard
               listing={item}
               onPress={() => openListing(item)}
-              onFavoriteChange={(isFavorite) => {
-                if (isFavorite) {
-                  void loadFavorites();
-                } else {
-                  setFavorites((current) =>
-                    current.filter(
-                      (favorite) => String(favorite.id) !== String(item.id)
-                    )
-                  );
-                }
-              }}
+              onRemoveFavorite={() => setSelectedItemToDelete(item)}
             />
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <Modal
+        visible={selectedItemToDelete !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedItemToDelete(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmationDialog}>
+            <Text style={styles.confirmationTitle}>Remove from Wishlist</Text>
+            <Text style={styles.confirmationMessage}>
+              Are you sure you want to delete this property from the wishlist?
+            </Text>
+            <View style={styles.confirmationActions}>
+              <Pressable
+                style={[styles.confirmationButton, styles.cancelButton]}
+                onPress={() => setSelectedItemToDelete(null)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmationButton, styles.removeButton]}
+                onPress={confirmRemoveFavorite}
+              >
+                <Text style={styles.removeButtonText}>Remove</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -246,5 +250,57 @@ const styles = StyleSheet.create({
   retryText: {
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+  },
+  confirmationDialog: {
+    width: "100%",
+    maxWidth: 400,
+    padding: 22,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+  },
+  confirmationTitle: {
+    color: "#0F172A",
+    fontSize: 19,
+    fontWeight: "700",
+  },
+  confirmationMessage: {
+    color: "#475569",
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 10,
+  },
+  confirmationActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 24,
+  },
+  confirmationButton: {
+    minWidth: 92,
+    alignItems: "center",
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  cancelButton: {
+    backgroundColor: "#F1F5F9",
+  },
+  cancelButtonText: {
+    color: "#334155",
+    fontWeight: "700",
+  },
+  removeButton: {
+    backgroundColor: "#DC2626",
+  },
+  removeButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
   },
 });

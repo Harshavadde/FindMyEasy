@@ -12,48 +12,52 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { getCurrentUser, logoutUser } from "../../../services/auth";
+import { getCurrentUser } from "../../../services/auth";
 import type { AuthUser } from "../../../services/auth";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { logout } = useAuth();
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { logout, user: sessionUser } = useAuth();
+  const [user, setUser] = useState<AuthUser | null>(sessionUser);
+  const [loading, setLoading] = useState(!sessionUser);
   const [error, setError] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
 
   const loadProfile = useCallback(async () => {
-    setLoading(true);
+    if (!sessionUser) setLoading(true);
     setError("");
 
     try {
       const result = await getCurrentUser();
       setUser(result);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load your profile."
-      );
+      if (!sessionUser) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load your profile."
+        );
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionUser]);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
 
       const load = async () => {
-        setLoading(true);
-        setError("");
+        if (!sessionUser) {
+          setLoading(true);
+          setError("");
+        }
 
         try {
           const result = await getCurrentUser();
           if (active) setUser(result);
         } catch (err) {
-          if (active) {
+          if (active && !sessionUser) {
             setError(
               err instanceof Error
                 ? err.message
@@ -70,7 +74,7 @@ export default function ProfileScreen() {
       return () => {
         active = false;
       };
-    }, [])
+    }, [sessionUser])
   );
 
   const handleLogout = () => {
