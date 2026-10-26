@@ -15,7 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { router, useFocusEffect } from "expo-router";
 
-import { API_BASE_URL } from "../../../constants/api";
+import { API_BASE_URL, ownerFetch } from "../../../constants/api";
+import { useAuth } from "../../../contexts/AuthContext";
 
 // ============================================================================
 // TYPES
@@ -233,6 +234,12 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
 // ============================================================================
 
 export default function MyListings() {
+  const { user } = useAuth();
+
+  return <MyListingsForOwner key={user?.id ?? "no-owner"} />;
+}
+
+function MyListingsForOwner() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -255,11 +262,8 @@ export default function MyListings() {
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const url = `${API_BASE_URL}/api/v1/owner/listings`;
-
-      const response = await fetch(url, {
+      const response = await ownerFetch("/api/v1/owner/listings", {
         method: "GET",
-        headers: { Accept: "application/json" },
         signal: controller.signal,
       });
 
@@ -546,7 +550,7 @@ export default function MyListings() {
               </View>
 
               <Text className="mt-6 text-center text-[20px] font-extrabold text-[#0F172A]">
-                No properties yet
+                You haven&apos;t added any properties yet.
               </Text>
 
               <Text className="mt-2 max-w-[280px] text-center text-[13px] leading-5 text-[#64748B]">
@@ -569,7 +573,7 @@ export default function MyListings() {
                 <Text className="mr-2 text-[20px] font-medium text-white">+</Text>
 
                 <Text className="text-[14px] font-extrabold text-white">
-                  Add Property
+                  Add your first property
                 </Text>
               </Pressable>
             </View>

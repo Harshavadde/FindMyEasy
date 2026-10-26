@@ -13,7 +13,7 @@ function SessionRouter() {
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "loading" || status === "offline") return;
+    if (status === "loading") return;
 
     const firstSegment = segments[0];
     const inAuthGroup = firstSegment === "(auth)";
@@ -22,7 +22,12 @@ function SessionRouter() {
     const atRoleSelection = !firstSegment;
 
     if (status === "unauthenticated") {
-      if (inOwnerGroup || inUserGroup) {
+      if (inOwnerGroup) {
+        router.replace({
+          pathname: "/(auth)/login",
+          params: { role: "owner" },
+        });
+      } else if (inUserGroup) {
         router.replace("/");
       }
       return;

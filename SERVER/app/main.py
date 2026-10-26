@@ -7,8 +7,7 @@ from sqlalchemy import text
 from app.api.routes.listings import router as listings_router
 
 from app.core.config import settings
-from app.db.database import Base, engine
-from app.models.listing_image import ListingImage
+from app.db.database import engine
 from app.api.routes.images import router as images_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.public_listings import router as public_listings_router
@@ -30,21 +29,6 @@ os.makedirs(
 
 
 # ---------------------------------------------------------------------------
-# Create database tables
-# ---------------------------------------------------------------------------
-
-Base.metadata.create_all(
-    bind=engine,
-)
-
-# Add the optional profile phone field to existing PostgreSQL databases.
-with engine.begin() as connection:
-    connection.execute(
-        text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(10)")
-    )
-
-
-# ---------------------------------------------------------------------------
 # FastAPI application
 # ---------------------------------------------------------------------------
 
@@ -60,7 +44,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -110,6 +94,12 @@ def root():
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-    }
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
+    return {"status": "ok", "database": "ok"}

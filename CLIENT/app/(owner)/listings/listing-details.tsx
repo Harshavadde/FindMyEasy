@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 
-import { API_BASE_URL } from "../../../constants/api";
+import { API_BASE_URL, ownerFetch } from "../../../constants/api";
 
 // ============================================================================
 // TYPES
@@ -427,7 +427,7 @@ export default function ListingDetailsScreen() {
       try {
         const url = `${API_BASE_URL}/api/v1/owner/listings/${listingId}`;
 
-        const response = await fetch(url, {
+        const response = await ownerFetch(`/api/v1/owner/listings/${listingId}`, {
           method: "GET",
           headers: { Accept: "application/json" },
           signal: controller.signal,
@@ -665,8 +665,8 @@ const occupancy = totalBeds > 0
               url
             );
 
-            const response = await fetch(
-              url,
+            const response = await ownerFetch(
+              `/api/v1/owner/listings/${listing.id}`,
               {
                 method: "DELETE",
                 headers: {

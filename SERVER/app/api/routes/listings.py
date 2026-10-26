@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import get_current_user
 from app.db.database import get_db
 from app.models.listing import Listing
 from app.models.listing_sharing import ListingSharing
+from app.models.user import User
 from app.schemas.listing import ListingCreate, ListingResponse
 from app.services.listing_service import (create_listing, update_listing)
 from app.models.listing_image import ListingImage
@@ -40,7 +42,15 @@ def listing_to_response(
 
         description=listing.description,
 
+        monthly_price=listing.monthly_price,
+
         security_deposit=listing.security_deposit,
+
+        total_beds=listing.total_beds,
+
+        available_beds=listing.available_beds,
+
+        filled_beds=listing.filled_beds,
 
         
         sharing=[
@@ -113,10 +123,13 @@ def listing_to_response(
 def create_owner_listing(
     data: ListingCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     listing, is_duplicate = create_listing(
         db=db,
         data=data,
+        owner_id=current_user.id,
+        owner_phone=current_user.phone or data.owner_phone,
     )
 
     if is_duplicate:
@@ -142,9 +155,11 @@ def create_owner_listing(
 )
 def get_owner_listings(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     listings = (
         db.query(Listing)
+        .filter(Listing.owner_id == current_user.id)
         .order_by(Listing.created_at.desc())
         .all()
     )
@@ -167,10 +182,14 @@ def get_owner_listings(
 def get_owner_listing(
     listing_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     listing = (
         db.query(Listing)
-        .filter(Listing.id == listing_id)
+        .filter(
+            Listing.id == listing_id,
+            Listing.owner_id == current_user.id,
+        )
         .first()
     )
 
@@ -198,12 +217,15 @@ def update_owner_listing(
     listing_id: str,
     data: ListingCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         listing, is_duplicate = update_listing(
             db=db,
             listing_id=listing_id,
             data=data,
+            owner_id=current_user.id,
+            owner_phone=current_user.phone or data.owner_phone,
         )
 
         if is_duplicate:
@@ -249,10 +271,14 @@ def update_owner_listing(
 def delete_owner_listing(
     listing_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     listing = (
         db.query(Listing)
-        .filter(Listing.id == listing_id)
+        .filter(
+            Listing.id == listing_id,
+            Listing.owner_id == current_user.id,
+        )
         .first()
     )
 

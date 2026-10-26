@@ -5,10 +5,16 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { ApiError } from "../constants/api";
+import {
+  getSessionGeneration,
+  isSessionEnding,
+  subscribeToSessionInvalidation,
+} from "../services/session";
 import {
   getCurrentUser,
   getSavedToken,
@@ -22,8 +28,9 @@ import {
 type SessionStatus =
   | "loading"
   | "authenticated"
-  | "unauthenticated"
-  | "offline";
+  | "unauthenticated";
+
+const SESSION_RESTORE_TIMEOUT_MS = 20000;
 
 type AuthContextValue = {
   status: SessionStatus;
@@ -40,42 +47,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const restoreAttempt = useRef(0);
 
   const restoreSession = useCallback(async () => {
-    setStatus("loading");
+    const attempt = ++restoreAttempt.current;
+    const generation = getSessionGeneration();
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
-    try {
-      const token = await getSavedToken();
-
-      if (!token) {
-        setUser(null);
-        setRole(null);
-        setStatus("unauthenticated");
+    const isCurrentAttempt = () => attempt === restoreAttempt.current;
+    const finishUnauthenticated = () => {
+      if (!isCurrentAttempt()) {
         return;
       }
 
-      // A missing role can occur for a session created before role persistence.
-      const savedRole = await getSavedUserRole();
-      const currentUser = await getCurrentUser();
+      settled = true;
+      setUser(null);
+      setRole(null);
+      setStatus("unauthenticated");
+    };
 
-      setUser(currentUser);
-      setRole(savedRole ?? "user");
-      setStatus("authenticated");
+    setStatus("loading");
+
+    try {
+      const restoration = (async () => {
+        const token = await getSavedToken();
+
+        if (!isCurrentAttempt()) {
+          return;
+        }
+        if (!token || isSessionEnding()) {
+          finishUnauthenticated();
+          return;
+        }
+
+        // A missing role can occur for a session created before role persistence.
+        const savedRole = await getSavedUserRole();
+        const currentUser = await getCurrentUser();
+
+        if (!isCurrentAttempt()) {
+          return;
+        }
+        if (generation !== getSessionGeneration() || isSessionEnding()) {
+          finishUnauthenticated();
+          return;
+        }
+
+        settled = true;
+        setUser(currentUser);
+        setRole(savedRole ?? "user");
+        setStatus("authenticated");
+      })();
+
+      await Promise.race([
+        restoration,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => {
+              if (isCurrentAttempt()) {
+                finishUnauthenticated();
+                restoreAttempt.current += 1;
+              }
+              reject(new Error("Session restoration timed out."));
+            },
+            SESSION_RESTORE_TIMEOUT_MS
+          );
+        }),
+      ]);
     } catch (error) {
+      if (!isCurrentAttempt()) {
+        return;
+      }
+
+      finishUnauthenticated();
+
       if (
         error instanceof ApiError &&
         error.kind === "http" &&
         error.status === 401
       ) {
-        await logoutUser();
-        setUser(null);
-        setRole(null);
-        setStatus("unauthenticated");
-        return;
+        void logoutUser().catch((cleanupError) => {
+          console.error("Unable to clear the invalid saved session.", cleanupError);
+        });
       }
-
-      // Do not destroy a saved session for network, timeout, or server errors.
-      setStatus("offline");
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      if (isCurrentAttempt() && !settled) {
+        finishUnauthenticated();
+      }
     }
   }, []);
 
@@ -83,9 +144,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void restoreSession();
   }, [restoreSession]);
 
+  useEffect(
+    () =>
+      subscribeToSessionInvalidation(() => {
+        restoreAttempt.current += 1;
+        setUser(null);
+        setRole(null);
+        setStatus("unauthenticated");
+      }),
+    []
+  );
+
   const completeLogin = useCallback(
     async (loggedInUser: AuthUser, selectedRole: UserRole) => {
       await saveUserRole(selectedRole);
+      restoreAttempt.current += 1;
       setUser(loggedInUser);
       setRole(selectedRole);
       setStatus("authenticated");
@@ -94,11 +167,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    // Clear secure storage first; only then mark the app logged out.
-    await logoutUser();
-    setUser(null);
-    setRole(null);
-    setStatus("unauthenticated");
+    restoreAttempt.current += 1;
+    const cleanup = logoutUser();
+
+    try {
+      await cleanup;
+    } finally {
+      setUser(null);
+      setRole(null);
+      setStatus("unauthenticated");
+    }
   }, []);
 
   const value = useMemo(
@@ -118,24 +196,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2563EB" />
         <Text style={styles.message}>Restoring your FindEasy session...</Text>
-      </View>
-    );
-  }
-
-  if (status === "offline") {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.title}>Unable to verify your session</Text>
-        <Text style={styles.message}>
-          Check your internet connection or try again when the server is available.
-          Your saved login has not been deleted.
-        </Text>
-        <Pressable
-          style={styles.button}
-          onPress={() => void restoreSession()}
-        >
-          <Text style={styles.buttonText}>Retry</Text>
-        </Pressable>
       </View>
     );
   }
@@ -165,27 +225,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 28,
   },
-  title: {
-    color: "#0F172A",
-    fontSize: 20,
-    fontWeight: "700",
-    textAlign: "center",
-  },
   message: {
     color: "#64748B",
     textAlign: "center",
     marginTop: 12,
     lineHeight: 21,
-  },
-  button: {
-    backgroundColor: "#2563EB",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
   },
 });

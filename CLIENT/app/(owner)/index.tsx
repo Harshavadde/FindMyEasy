@@ -14,7 +14,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 
-import { API_BASE_URL } from "../../constants/api";
+import { API_BASE_URL, ownerFetch } from "../../constants/api";
+import { useAuth } from "../../contexts/AuthContext";
 
 
 function getImageUrl(imageUrl: string) {
@@ -310,6 +311,12 @@ const availableBeds = sharingOptions.length > 0
 // ============================================================
 
 export default function OwnerDashboard() {
+  const { user } = useAuth();
+
+  return <OwnerDashboardForOwner key={user?.id ?? "no-owner"} />;
+}
+
+function OwnerDashboardForOwner() {
   const [listings, setListings] =
     useState<Listing[]>([]);
 
@@ -318,6 +325,9 @@ export default function OwnerDashboard() {
 
   const [refreshing, setRefreshing] =
     useState(false);
+
+  const [listingsError, setListingsError] =
+    useState<string | null>(null);
 
   // ============================================================
   // LOAD LISTINGS
@@ -332,83 +342,45 @@ export default function OwnerDashboard() {
           setLoadingListings(true);
         }
 
-        const url =
-          `${API_BASE_URL}/api/v1/owner/listings`;
-
-        console.log(
-          "===================================="
-        );
-
-        console.log(
-          "LOADING OWNER LISTINGS"
-        );
-
-        console.log(
-          "URL:",
-          url
-        );
-
-        console.log(
-          "===================================="
-        );
-
-        const response = await fetch(url, {
+        const response = await ownerFetch("/api/v1/owner/listings", {
           method: "GET",
           headers: {
             Accept: "application/json",
           },
         });
 
-        console.log(
-          "LISTINGS HTTP STATUS:",
-          response.status
-        );
-
         const raw =
           await response.text();
 
-        console.log(
-          "LISTINGS RAW RESPONSE:",
-          raw
-        );
+        let data: any = null;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch {
+          data = null;
+        }
 
         if (!response.ok) {
           throw new Error(
-            `Failed to load listings (${response.status})`
+            typeof data?.detail === "string"
+              ? data.detail
+              : `Failed to load listings (${response.status}).`
           );
         }
-
-        const data: Listing[] =
-          raw ? JSON.parse(raw) : [];
-
-        console.log(
-          "LISTINGS COUNT:",
-          data.length
-        );
-
-        console.log(
-          "LISTINGS DATA:",
-          JSON.stringify(
-            data,
-            null,
-            2
-          )
-        );
 
         setListings(
           Array.isArray(data)
             ? data
             : []
         );
+        setListingsError(null);
       } catch (error) {
-        console.error(
-          "LOAD LISTINGS ERROR:",
-          error
-        );
-
+        const message = error instanceof Error
+          ? error.message
+          : "We could not load your properties. Please check your connection and try again.";
+        setListingsError(message);
         Alert.alert(
           "Unable to load listings",
-          "We could not load your properties. Please check your connection and try again."
+          message
         );
       } finally {
         setLoadingListings(false);
@@ -631,6 +603,26 @@ export default function OwnerDashboard() {
 
             </View>
 
+          ) : listingsError && listings.length === 0 ? (
+            <View className="mt-5 items-center rounded-[24px] bg-white px-6 py-9">
+              <Text className="text-[17px] font-extrabold text-[#0F172A]">
+                Couldn't load your properties
+              </Text>
+
+              <Text className="mt-2 text-center text-[13px] leading-5 text-[#64748B]">
+                {listingsError}
+              </Text>
+
+              <Pressable
+                onPress={() => loadListings()}
+                className="mt-5 rounded-full bg-[#2563EB] px-6 py-3"
+              >
+                <Text className="text-[13px] font-bold text-white">
+                  Try again
+                </Text>
+              </Pressable>
+            </View>
+
           ) : listings.length === 0 ? (
 
             <View className="mt-5 items-center rounded-[24px] border border-dashed border-[#CBD5E1] bg-white px-6 py-9">
@@ -642,7 +634,7 @@ export default function OwnerDashboard() {
               </View>
 
               <Text className="mt-4 text-center text-[17px] font-extrabold text-[#0F172A]">
-                No properties yet
+                You haven&apos;t added any properties yet.
               </Text>
 
               <Text className="mt-2 text-center text-[13px] leading-5 text-[#64748B]">
@@ -658,7 +650,7 @@ export default function OwnerDashboard() {
                 className="mt-5 rounded-full bg-[#14B8A6] px-6 py-3"
               >
                 <Text className="text-[13px] font-bold text-white">
-                  + Add Property
+                  Add your first property
                 </Text>
               </Pressable>
 

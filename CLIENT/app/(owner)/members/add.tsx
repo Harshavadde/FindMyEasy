@@ -12,7 +12,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
-import { API_BASE_URL } from "../../../constants/api";
+import { API_BASE_URL, ownerFetch } from "../../../constants/api";
 import {
   addMember,
   getMember,
@@ -141,8 +141,8 @@ async function loadMemberForEdit() {
     try {
       setLoadingSharing(true);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/owner/listings/${listingId}`,
+      const response = await ownerFetch(
+        `/api/v1/owner/listings/${listingId}`,
       );
 
       const data = await response.json();

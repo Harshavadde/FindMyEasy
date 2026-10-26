@@ -766,11 +766,14 @@ export default function UserListingDetails() {
               value={listing.food_available || "Not provided"}
             />
 
-            {listing.food_type ? (
-              <DetailRow label="Food type" value={listing.food_type} />
-            ) : null}
-
-            {[
+            {listing.food_available !== "Yes" ? (
+              <DetailRow label="Meals" value="Food not provided" />
+            ) : (
+              <>
+                {listing.food_type ? (
+                  <DetailRow label="Food type" value={listing.food_type} />
+                ) : null}
+                {[
               {
                 label: "Breakfast",
                 start: listing.breakfast_start_time,
@@ -792,11 +795,13 @@ export default function UserListingDetails() {
                 label={meal.label}
                 value={
                   meal.start && meal.end
-                    ? `${meal.start} - ${meal.end}`
+                    ? `${meal.start} – ${meal.end}`
                     : meal.start || meal.end || "Not set"
                 }
               />
             ))}
+              </>
+            )}
           </Section>
 
           {listing.restrictions ? (

@@ -1,0 +1,105 @@
+import os
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from app.api.routes.listings import router as listings_router
+
+from app.core.config import settings
+from app.db.database import engine
+from app.api.routes.images import router as images_router
+from app.api.routes.auth import router as auth_router
+from app.api.routes.public_listings import router as public_listings_router
+from app.models.hostel_member import HostelMember
+from app.models.user import User
+from app.models.favorite import Favorite
+from app.api.routes.favorites import router as favorites_router
+from app.api.routes.members import router as members_router
+
+
+# ---------------------------------------------------------------------------
+# Create upload directory
+# ---------------------------------------------------------------------------
+
+os.makedirs(
+    settings.UPLOAD_DIR,
+    exist_ok=True,
+)
+
+
+# ---------------------------------------------------------------------------
+# FastAPI application
+# ---------------------------------------------------------------------------
+
+app = FastAPI(
+    title="FindEasy API",
+    version="1.0.0",
+)
+
+
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ---------------------------------------------------------------------------
+# Static uploaded files
+# ---------------------------------------------------------------------------
+
+app.mount(
+    "/uploads",
+    StaticFiles(directory=settings.UPLOAD_DIR),
+    name="uploads",
+)
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+app.include_router(
+    images_router,
+)
+
+
+app.include_router(
+    listings_router,
+)
+
+app.include_router(auth_router)
+app.include_router(favorites_router)
+
+app.include_router(public_listings_router)
+app.include_router(members_router)
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
+
+@app.get("/")
+def root():
+    return {
+        "message": "FindEasy API is running",
+    }
+
+
+@app.get("/health")
+def health():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
+    return {"status": "ok", "database": "ok"}

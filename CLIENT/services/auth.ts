@@ -1,9 +1,12 @@
 
-import * as SecureStore from "expo-secure-store";
 import { API_BASE_URL, getJson, postJson } from "../constants/api";
-
-const TOKEN_KEY = "findeasy_access_token";
-const ROLE_KEY = "findeasy_user_role";
+import {
+  clearSavedSession,
+  getAccessToken,
+  getSavedUserRole as readSavedUserRole,
+  saveAccessToken,
+  saveUserRole as persistUserRole,
+} from "./session";
 
 export type UserRole = "user" | "owner";
 
@@ -33,7 +36,7 @@ export async function loginUser(data: {
   password: string;
 }): Promise<AuthResponse> {
   const result = await postJson<AuthResponse>("/api/v1/auth/login", data);
-  await SecureStore.setItemAsync(TOKEN_KEY, result.access_token);
+  await saveAccessToken(result.access_token);
   return result;
 }
 
@@ -50,21 +53,19 @@ export async function getCurrentUser(): Promise<AuthUser> {
 }
 
 export async function getSavedToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(TOKEN_KEY);
+  return getAccessToken();
 }
 
 export async function saveUserRole(role: UserRole): Promise<void> {
-  await SecureStore.setItemAsync(ROLE_KEY, role);
+  await persistUserRole(role);
 }
 
 export async function getSavedUserRole(): Promise<UserRole | null> {
-  const value = await SecureStore.getItemAsync(ROLE_KEY);
-  return value === "user" || value === "owner" ? value : null;
+  return readSavedUserRole();
 }
 
 export async function logoutUser(): Promise<void> {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
-  await SecureStore.deleteItemAsync(ROLE_KEY);
+  await clearSavedSession();
 }
 
 export async function updateCurrentUser(

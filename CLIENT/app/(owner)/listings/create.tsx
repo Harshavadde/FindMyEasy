@@ -1,5 +1,6 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ownerFetch } from "../../../constants/api";
 
 
 import {
@@ -43,17 +44,12 @@ import DateTimePicker, {
 
 } from "@react-native-community/datetimepicker";
 
-import MapView, {
-
-  LatLng,
-
-  MapPressEvent,
-
-  Marker,
-
-  Region,
-
-} from "react-native-maps";
+import ListingLocationMap from "../../../components/ListingLocationMap";
+import type {
+  ListingLocationMapHandle,
+  LocationCoordinate,
+  LocationRegion,
+} from "../../../components/ListingLocationMap.types";
 
 
 
@@ -89,6 +85,7 @@ type FoodType = "Veg" | "Non-Veg" | "Both";
 
 type SharingType = "1" | "2" | "3" | "4" | "5" | "10";
 
+
 type SharingPricing = {
   id?: string;
   key: string;
@@ -99,7 +96,9 @@ type SharingPricing = {
   total_beds: string;
   available_beds: string;
   filled_beds: string;
+  isConfirmed?: boolean;
 };
+
 
 
 
@@ -133,7 +132,7 @@ const CREATE_LISTING_PATH = "/api/v1/owner/listings";
 
 
 
-const DEFAULT_REGION: Region = {
+const DEFAULT_REGION: LocationRegion = {
 
   latitude: 17.385,
 
@@ -350,7 +349,7 @@ const isEditMode = mode === "edit" && Boolean(listingId);
 
 
 
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<ListingLocationMapHandle>(null);
 
 
 
@@ -360,9 +359,9 @@ const isEditMode = mode === "edit" && Boolean(listingId);
 
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
 
-  const [mapRegion, setMapRegion] = useState<Region>(DEFAULT_REGION);
+  const [mapRegion, setMapRegion] = useState<LocationRegion>(DEFAULT_REGION);
 
-  const [selectedLocation, setSelectedLocation] = useState<LatLng | null>(
+  const [selectedLocation, setSelectedLocation] = useState<LocationCoordinate | null>(
 
     null
 
@@ -391,8 +390,8 @@ const isEditMode = mode === "edit" && Boolean(listingId);
 
     const loadListingForEdit = async () => {
       try {
-        const response = await fetch(
-          `${API_BASE_URL}/api/v1/owner/listings/${encodeURIComponent(listingId)}`
+        const response = await ownerFetch(
+          `/api/v1/owner/listings/${encodeURIComponent(listingId)}`
         );
 
         const data = await response.json();
@@ -429,6 +428,7 @@ const isEditMode = mode === "edit" && Boolean(listingId);
           total_beds: String(item.total_beds ?? ""),
           available_beds: String(item.available_beds ?? ""),
           filled_beds: String(item.filled_beds ?? ""),
+          isConfirmed: true,
         }))
       );
 
@@ -513,6 +513,7 @@ const isEditMode = mode === "edit" && Boolean(listingId);
       total_beds: "",
       available_beds: "",
       filled_beds: "",
+      isConfirmed: false,
     },
   ]);
 };
@@ -523,32 +524,90 @@ const removeSharingOption = (key: string) => {
   );
 };
 
+
 const updateSharing = (
   key: string,
   field: keyof SharingPricing,
   value: string
 ) => {
-  setSharingPricing((current) => {
-    const updated = current.map((item) =>
-      item.key === key ? { ...item, [field]: value } : item
-    );
+  setSharingPricing((current) =>
+    current.map((item) => {
+      if (item.key !== key) return item;
 
-    console.log(
-      "UPDATED SHARING OPTIONS:",
-      JSON.stringify(
-        updated.map((item) => ({
-          key: item.key,
-          sharing_type: item.sharing_type,
-          ac_type: item.ac_type,
-        })),
-        null,
-        2
-      )
-    );
+      const updated = { ...item, [field]: value };
 
-    return updated;
-  });
+      // Calculate Available Beds automatically.
+      if (field === "total_beds" || field === "filled_beds") {
+        const total = Number(
+          field === "total_beds" ? value : item.total_beds
+        );
+        const filled = Number(
+          field === "filled_beds" ? value : item.filled_beds
+        );
+
+        updated.available_beds =
+          updated.total_beds.trim() !== "" &&
+          updated.filled_beds.trim() !== "" &&
+          Number.isInteger(total) &&
+          Number.isInteger(filled) &&
+          total >= 0 &&
+          filled >= 0 &&
+          filled <= total
+            ? String(total - filled)
+            : "";
+      }
+
+      // Editing a confirmed option makes it a draft again.
+      updated.isConfirmed = false;
+
+      return updated;
+    })
+  );
 };
+
+
+
+
+const confirmSharingOption = (item: SharingPricing) => {
+  const total = Number(item.total_beds);
+  const filled = Number(item.filled_beds);
+  const price = Number(item.monthly_price);
+
+  if (!item.monthly_price.trim() || !Number.isFinite(price) || price <= 0) {
+    Alert.alert("Monthly amount required", "Enter a valid monthly amount.");
+    return;
+  }
+
+  if (
+    !item.total_beds.trim() ||
+    !item.filled_beds.trim() ||
+    !Number.isInteger(total) ||
+    !Number.isInteger(filled) ||
+    total <= 0 ||
+    filled < 0 ||
+    filled > total
+  ) {
+    Alert.alert(
+      "Invalid bed counts",
+      "Total beds must be greater than zero, and filled beds must be between zero and total beds."
+    );
+    return;
+  }
+
+  setSharingPricing((current) =>
+    current.map((option) =>
+      option.key === item.key
+        ? {
+            ...option,
+            available_beds: String(total - filled),
+            isConfirmed: true,
+          }
+        : option
+    )
+  );
+};
+
+
 
 
   // ==========================================================================
@@ -583,14 +642,16 @@ const updateSharing = (
 
 
 
-    if (sharingPricing.length === 0) {
+    const confirmedSharing = sharingPricing.filter((item) => item.isConfirmed);
+
+    if (confirmedSharing.length === 0) {
       return [
         "Sharing option required",
-        "Please select at least one sharing option.",
+        "Please complete and confirm at least one sharing option using the Done button.",
       ];
     }
 
-    for (const item of sharingPricing) {
+    for (const item of confirmedSharing) {
       const total = Number(item.total_beds);
       const available = Number(item.available_beds);
       const filled = Number(item.filled_beds);
@@ -814,7 +875,7 @@ const updateSharing = (
 
       security_deposit: securityDeposit.trim() ? Number(securityDeposit) : 0,
 
-      sharing: sharingPricing.map((item) => ({
+      sharing: sharingPricing.filter((item) => item.isConfirmed).map((item) => ({
   ...(item.id ? { id: item.id } : {}),
   sharing_type: item.sharing_type,
   ac_type: item.ac_type,
@@ -892,7 +953,11 @@ const updateSharing = (
         ? `${API_BASE_URL}/api/v1/owner/listings/${encodeURIComponent(String(listingId))}`
         : `${API_BASE_URL}${CREATE_LISTING_PATH}`;
 
-      const response = await fetch(url, {
+      const response = await ownerFetch(
+        isEditMode
+          ? `/api/v1/owner/listings/${encodeURIComponent(String(listingId))}`
+          : CREATE_LISTING_PATH,
+        {
         method: isEditMode ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
@@ -931,31 +996,6 @@ const updateSharing = (
         params: { listingId: String(data.id) },
       });
 
-
-
-
-
-      if (data?.id === undefined || data?.id === null) {
-
-        throw new ApiError(
-
-          "http",
-
-          "The listing was created but the server did not return a listing ID."
-
-        );
-
-      }
-
-
-
-      router.push({
-
-        pathname: "/(owner)/listings/photos",
-
-        params: { listingId: String(data.id) },
-
-      });
 
     } catch (err: unknown) {
 
@@ -1286,14 +1326,6 @@ const updateSharing = (
       setIsSearchingLocation(false);
 
     }
-
-  };
-
-
-
-  const handleMapPress = (event: MapPressEvent) => {
-
-    setSelectedLocation(event.nativeEvent.coordinate);
 
   };
 
@@ -1630,115 +1662,153 @@ const updateSharing = (
               className="mt-4 rounded-[18px] bg-[#F8FAFC] p-4"
               style={{ borderWidth: 1, borderColor: "#E2E8F0" }}
             >
-              <View className="mb-3 flex-row items-center justify-between">
-                <Text className="text-[15px] font-extrabold text-[#0F172A]">
-                  Sharing Option {index + 1}
-                </Text>
+              {item.isConfirmed ? (
+                <>
+                  <View className="flex-row items-start justify-between">
+                    <View className="flex-1 pr-3">
+                      <Text className="text-[15px] font-extrabold text-[#0F172A]">
+                        {item.sharing_type} Sharing · {item.ac_type}
+                      </Text>
+                      <Text className="mt-1 text-[12px] font-bold text-[#15803D]">
+                        ✓ Confirmed
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center">
+                      <Pressable
+                        onPress={() =>
+                          setSharingPricing((current) =>
+                            current.map((option) =>
+                              option.key === item.key
+                                ? { ...option, isConfirmed: false }
+                                : option
+                            )
+                          )
+                        }
+                        className="mr-4"
+                      >
+                        <Text className="text-[12px] font-bold text-[#2563EB]">Edit</Text>
+                      </Pressable>
+                      <Pressable onPress={() => removeSharingOption(item.key)}>
+                        <Text className="text-[12px] font-bold text-[#DC2626]">Remove</Text>
+                      </Pressable>
+                    </View>
+                  </View>
 
-                <Pressable onPress={() => removeSharingOption(item.key)}>
-                  <Text className="text-[12px] font-bold text-[#DC2626]">
-                    Remove
-                  </Text>
-                </Pressable>
-              </View>
+                  <View className="mt-3 rounded-[14px] bg-white p-3">
+                    <Text className="text-[13px] font-bold text-[#334155]">
+                      Monthly amount: ₹{item.monthly_price}
+                    </Text>
+                    <Text className="mt-2 text-[12px] text-[#475569]">
+                      Total beds: {item.total_beds}  ·  Filled: {item.filled_beds}  ·  Available: {item.available_beds}
+                    </Text>
+                    {item.floor.trim() ? (
+                      <Text className="mt-2 text-[12px] text-[#475569]">Floor: {item.floor}</Text>
+                    ) : null}
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View className="mb-3 flex-row items-center justify-between">
+                    <Text className="text-[15px] font-extrabold text-[#0F172A]">
+                      Sharing Option {index + 1}
+                    </Text>
+                    <Pressable onPress={() => removeSharingOption(item.key)}>
+                      <Text className="text-[12px] font-bold text-[#DC2626]">Remove</Text>
+                    </Pressable>
+                  </View>
 
-              <FieldLabel label="Sharing Type" required />
-              <View className="flex-row flex-wrap">
-                {SHARING_OPTIONS.map((type) => (
-                  <OptionButton
-                    key={type}
-                    label={`${type} Sharing`}
-                    selected={item.sharing_type === type}
-                    onPress={() =>
-                      updateSharing(item.key, "sharing_type", type)
-                    }
-                  />
-                ))}
-              </View>
+                  <FieldLabel label="Sharing Type" required />
+                  <View className="flex-row flex-wrap">
+                    {SHARING_OPTIONS.map((type) => (
+                      <OptionButton
+                        key={type}
+                        label={`${type} Sharing`}
+                        selected={item.sharing_type === type}
+                        onPress={() => updateSharing(item.key, "sharing_type", type)}
+                      />
+                    ))}
+                  </View>
 
-              <FieldLabel label="AC Type" required marginTop />
-              <View className="flex-row flex-wrap">
-                {(["AC", "Non-AC"] as ACType[]).map((type) => (
-                  <OptionButton
-                    key={type}
-                    label={type}
-                    selected={item.ac_type === type}
-                    onPress={() => updateSharing(item.key, "ac_type", type)}
-                  />
-                ))}
-              </View>
+                  <FieldLabel label="AC Type" required marginTop />
+                  <View className="flex-row flex-wrap">
+                    {(["AC", "Non-AC"] as ACType[]).map((type) => (
+                      <OptionButton
+                        key={type}
+                        label={type}
+                        selected={item.ac_type === type}
+                        onPress={() => updateSharing(item.key, "ac_type", type)}
+                      />
+                    ))}
+                  </View>
 
-              <View className="mt-3">
-                <Field
-                  label="Floor"
-                  value={item.floor}
-                  onChangeText={(value) =>
-                    updateSharing(item.key, "floor", value)
-                  }
-                  placeholder="e.g. Ground Floor, 1st Floor"
-                />
-              </View>
+                  <View className="mt-3">
+                    <Field
+                      label="Floor"
+                      value={item.floor}
+                      onChangeText={(value) => updateSharing(item.key, "floor", value)}
+                      placeholder="e.g. Ground Floor, 1st Floor"
+                    />
+                  </View>
 
-              <View className="mt-3">
-                <Field
-                  label="Monthly Amount (₹)"
-                  required
-                  numeric
-                  value={item.monthly_price}
-                  onChangeText={(value) =>
-                    updateSharing(item.key, "monthly_price", value)
-                  }
-                  placeholder="10000"
-                />
-              </View>
+                  <View className="mt-3">
+                    <Field
+                      label="Monthly Amount (₹)"
+                      required
+                      numeric
+                      value={item.monthly_price}
+                      onChangeText={(value) => updateSharing(item.key, "monthly_price", value)}
+                      placeholder="10000"
+                    />
+                  </View>
 
-              <View className="mt-3 flex-row">
-                <View className="mr-3 flex-1">
-                  <Field
-                    label="Total Beds"
-                    required
-                    numeric
-                    value={item.total_beds}
-                    onChangeText={(value) =>
-                      updateSharing(item.key, "total_beds", value)
-                    }
-                    placeholder="10"
-                  />
-                </View>
+                  <View className="mt-3 flex-row">
+                    <View className="mr-3 flex-1">
+                      <Field
+                        label="Total Beds"
+                        required
+                        numeric
+                        value={item.total_beds}
+                        onChangeText={(value) => updateSharing(item.key, "total_beds", value)}
+                        placeholder="10"
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <FieldLabel label="Available Beds" required />
+                      <View className="mt-0 justify-center rounded-[15px] bg-[#EFF6FF] px-4" style={{ height: 50, borderWidth: 1, borderColor: "#BFDBFE" }}>
+                        <Text className="text-[14px] font-bold text-[#1D4ED8]">
+                          {item.available_beds || "—"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
 
-                <View className="flex-1">
-                  <Field
-                    label="Available Beds"
-                    required
-                    numeric
-                    value={item.available_beds}
-                    onChangeText={(value) =>
-                      updateSharing(item.key, "available_beds", value)
-                    }
-                    placeholder="3"
-                  />
-                </View>
-              </View>
+                  <View className="mt-3">
+                    <Field
+                      label="Filled Beds"
+                      required
+                      numeric
+                      value={item.filled_beds}
+                      onChangeText={(value) => updateSharing(item.key, "filled_beds", value)}
+                      placeholder="7"
+                    />
+                  </View>
 
-              <View className="mt-3">
-                <Field
-                  label="Filled Beds"
-                  required
-                  numeric
-                  value={item.filled_beds}
-                  onChangeText={(value) =>
-                    updateSharing(item.key, "filled_beds", value)
-                  }
-                  placeholder="7"
-                />
-              </View>
+                  <View className="mt-3 rounded-[13px] bg-[#EFF6FF] p-3">
+                    <Text className="text-[12px] font-bold text-[#1E40AF]">
+                      {item.available_beds || "—"} available + {item.filled_beds || "—"} filled = {item.total_beds || "—"} total
+                    </Text>
+                  </View>
 
-              <View className="mt-3 rounded-[13px] bg-[#EFF6FF] p-3">
-                <Text className="text-[12px] font-bold text-[#1E40AF]">
-                  {item.available_beds || "0"} available +{" "}
-                  {item.filled_beds || "0"} filled = {item.total_beds || "0"} total
-                </Text>
-              </View>
+                  <Pressable
+                    onPress={() => confirmSharingOption(item)}
+                    className="mt-4 items-center rounded-[14px] bg-[#15803D] px-4 py-3"
+                  >
+                    <Text className="text-[13px] font-extrabold text-white">
+                      ✓ Done — Confirm Sharing Option
+                    </Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           ))}
           </Card>
@@ -2428,41 +2498,12 @@ const updateSharing = (
 
           <View className="flex-1">
 
-            <MapView
-
+            <ListingLocationMap
               ref={mapRef}
-
-              style={{ flex: 1 }}
-
               initialRegion={mapRegion}
-
-              onPress={handleMapPress}
-
-            >
-
-              {selectedLocation && (
-
-                <Marker
-
-                  coordinate={selectedLocation}
-
-                  title="Property Location"
-
-                  description="Selected hostel / PG location"
-
-                  draggable
-
-                  onDragEnd={(e: { nativeEvent: { coordinate: LatLng } }) =>
-
-                    setSelectedLocation(e.nativeEvent.coordinate)
-
-                  }
-
-                />
-
-              )}
-
-            </MapView>
+              selectedLocation={selectedLocation}
+              onLocationSelected={setSelectedLocation}
+            />
 
 
 

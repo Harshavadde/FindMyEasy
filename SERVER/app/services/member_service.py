@@ -30,11 +30,14 @@ def normalize_phone(value: str | None) -> str:
 def verify_listing_owner(
     db: Session,
     listing_id: str,
-    owner_phone: str,
+    owner_id: str,
 ) -> Listing:
     listing = (
         db.query(Listing)
-        .filter(Listing.id == listing_id)
+        .filter(
+            Listing.id == listing_id,
+            Listing.owner_id == owner_id,
+        )
         .first()
     )
 
@@ -42,15 +45,6 @@ def verify_listing_owner(
         raise HTTPException(
             status_code=404,
             detail="Listing not found.",
-        )
-
-    requested_phone = normalize_phone(owner_phone)
-    listing_phone = normalize_phone(listing.owner_phone)
-
-    if not requested_phone or requested_phone != listing_phone:
-        raise HTTPException(
-            status_code=403,
-            detail="You are not authorized to manage this listing.",
         )
 
     return listing
@@ -171,21 +165,21 @@ async def save_aadhaar_photo(
             detail="Aadhaar photo must be smaller than 5 MB.",
         )
 
-    directory = Path(private_directory)
-    directory.mkdir(
-        parents=True,
-        exist_ok=True,
+    extension = ALLOWED_AADHAAR_TYPES[upload.content_type]
+    object_key = f"private/aadhaar/{uuid.uuid4()}{extension}"
+
+    from app.services.image_service import create_storage_client
+
+    client, _endpoint, bucket = create_storage_client()
+    client.put_object(
+        Bucket=bucket,
+        Key=object_key,
+        Body=content,
+        ContentType=upload.content_type,
+        ServerSideEncryption="AES256",
     )
 
-    extension = ALLOWED_AADHAAR_TYPES[upload.content_type]
-
-    filename = f"{uuid.uuid4()}{extension}"
-
-    file_path = directory / filename
-
-    file_path.write_bytes(content)
-
-    return str(file_path)
+    return object_key
 
 
 def calculate_pending(
@@ -198,13 +192,14 @@ def calculate_pending(
 def create_member(
     db: Session,
     listing_id: str,
+    owner_id: str,
     data: MemberCreate,
     aadhaar_photo_path: str | None = None,
 ):
     listing = verify_listing_owner(
         db=db,
         listing_id=listing_id,
-        owner_phone=data.owner_phone,
+        owner_id=owner_id,
     )
 
     sharing = get_sharing_for_listing(
@@ -269,12 +264,12 @@ def create_member(
 def get_members(
     db: Session,
     listing_id: str,
-    owner_phone: str,
+    owner_id: str,
 ):
     listing = verify_listing_owner(
         db=db,
         listing_id=listing_id,
-        owner_phone=owner_phone,
+        owner_id=owner_id,
     )
 
     return (
@@ -289,12 +284,12 @@ def get_member(
     db: Session,
     listing_id: str,
     member_id: str,
-    owner_phone: str,
+    owner_id: str,
 ):
     listing = verify_listing_owner(
         db=db,
         listing_id=listing_id,
-        owner_phone=owner_phone,
+        owner_id=owner_id,
     )
 
     member = (
@@ -319,13 +314,14 @@ def update_member(
     db: Session,
     listing_id: str,
     member_id: str,
+    owner_id: str,
     data: MemberUpdate,
 ):
     member = get_member(
         db=db,
         listing_id=listing_id,
         member_id=member_id,
-        owner_phone=data.owner_phone,
+        owner_id=owner_id,
     )
 
     old_sharing_id = member.sharing_id
@@ -436,13 +432,13 @@ def delete_member(
     db: Session,
     listing_id: str,
     member_id: str,
-    owner_phone: str,
+    owner_id: str,
 ):
     member = get_member(
         db=db,
         listing_id=listing_id,
         member_id=member_id,
-        owner_phone=owner_phone,
+        owner_id=owner_id,
     )
 
     sharing = (
@@ -466,13 +462,21 @@ def delete_member(
     db.commit()
 
     if aadhaar_path:
-        try:
-            path = Path(aadhaar_path)
+        if aadhaar_path.startswith("private/"):
+            try:
+                from app.services.image_service import create_storage_client
 
-            if path.exists():
-                path.unlink()
-        except OSError:
-            pass
+                client, _endpoint, bucket = create_storage_client()
+                client.delete_object(Bucket=bucket, Key=aadhaar_path)
+            except Exception:
+                pass
+        else:
+            try:
+                path = Path(aadhaar_path)
+                if path.exists():
+                    path.unlink()
+            except OSError:
+                pass
 
     return {
         "message": "Member deleted successfully.",
@@ -482,12 +486,12 @@ def delete_member(
 def get_member_stats(
     db: Session,
     listing_id: str,
-    owner_phone: str,
+    owner_id: str,
 ):
     listing = verify_listing_owner(
         db=db,
         listing_id=listing_id,
-        owner_phone=owner_phone,
+        owner_id=owner_id,
     )
 
     members = (

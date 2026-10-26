@@ -1,0 +1,29 @@
+
+{
+  "expo": {
+    "name": "FindMyEasy",
+    "slug": "findmyeasy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "findeasy",
+    "android": {
+      "package": "com.findmyeasy.app"
+    },
+    "plugins": [
+      "expo-router",
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "expo-secure-store"
+    ],
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9d099335-bca2-432e-968d-715ed7d57297"
+      }
+    }
+  }
+}

@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import get_current_user
 from app.db.database import get_db
+from app.models.user import User
 from app.schemas.image import ImageResponse, ImageType
 from app.services.image_service import save_listing_image_bytes
 
@@ -21,6 +23,7 @@ async def upload_listing_image_raw(
     image_type: ImageType,
     request: Request,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     content_type = (
         request.headers.get(
@@ -54,4 +57,5 @@ async def upload_listing_image_raw(
         file_data=file_data,
         content_type=content_type,
         original_filename=original_filename,
+        owner_id=current_user.id,
     )

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { API_BASE_URL } from "../../../constants/api";
+import { API_BASE_URL, ownerFetch } from "../../../constants/api";
 import {
   ActivityIndicator,
   Alert,
@@ -496,7 +496,7 @@ const uploadImage = async (
     // NO multipart/form-data.
     // NO uploadAsync().
     // NO FormDataPart.
-    const response = await expoFetch(uploadUrl, {
+    const response = await ownerFetch(uploadUrl, {
       method: "POST",
 
       headers: {
@@ -506,7 +506,7 @@ const uploadImage = async (
       },
 
       body: file,
-    });
+    }, expoFetch);
 
     console.log(
       "Upload HTTP status:",

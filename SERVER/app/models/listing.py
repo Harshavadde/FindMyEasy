@@ -4,6 +4,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     JSON,
@@ -50,12 +51,16 @@ class Listing(Base):
 
     owner_id = Column(
         String(36),
+        ForeignKey(
+            "users.id",
+            name="fk_listings_owner_id_users",
+            ondelete="SET NULL",
+        ),
         nullable=True,
         index=True,
     )
 
-    # NOTE: nullable for now because the mobile app does not send this yet.
-    # Change to nullable=False once the app (or your auth layer) supplies it.
+    # Nullable to preserve legacy listings until their legitimate owners are verified.
     owner_phone = Column(
         String(20),
         nullable=True,
@@ -175,6 +180,11 @@ class Listing(Base):
     # ------------------------------------------------------------------
     # RELATIONSHIPS
     # ------------------------------------------------------------------
+
+    owner = relationship(
+        "User",
+        back_populates="listings",
+    )
 
     sharing = relationship(
         "ListingSharing",

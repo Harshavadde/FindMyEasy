@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from datetime import date
 
+from app.api.routes.auth import get_current_user
 from app.db.database import get_db
+from app.models.user import User
 from app.schemas.member import (
     MemberCreate,
     MemberResponse,
@@ -57,13 +59,13 @@ def member_to_response(member) -> MemberResponse:
 )
 def list_members(
     listing_id: str,
-    owner_phone: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     members = get_members(
         db=db,
         listing_id=listing_id,
-        owner_phone=owner_phone,
+        owner_id=current_user.id,
     )
 
     return [
@@ -78,13 +80,13 @@ def list_members(
 )
 def member_stats(
     listing_id: str,
-    owner_phone: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return get_member_stats(
         db=db,
         listing_id=listing_id,
-        owner_phone=owner_phone,
+        owner_id=current_user.id,
     )
 
 
@@ -114,6 +116,7 @@ async def add_member(
     aadhaar_photo: UploadFile | None = File(None),
 
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     from datetime import date
 
@@ -159,6 +162,7 @@ async def add_member(
         member = create_member(
             db=db,
             listing_id=listing_id,
+            owner_id=current_user.id,
             data=data,
             aadhaar_photo_path=aadhaar_photo_path,
         )
@@ -186,14 +190,14 @@ async def add_member(
 def get_single_member(
     listing_id: str,
     member_id: str,
-    owner_phone: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     member = get_member(
         db=db,
         listing_id=listing_id,
         member_id=member_id,
-        owner_phone=owner_phone,
+        owner_id=current_user.id,
     )
 
     return member_to_response(member)
@@ -227,6 +231,7 @@ async def edit_member(
     aadhaar_photo: UploadFile | None = File(None),
 
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         parsed_joining_date = date.fromisoformat(joining_date)
@@ -269,6 +274,7 @@ async def edit_member(
         db=db,
         listing_id=listing_id,
         member_id=member_id,
+        owner_id=current_user.id,
         data=data,
     )
     except Exception:
@@ -291,12 +297,12 @@ async def edit_member(
 def remove_member(
     listing_id: str,
     member_id: str,
-    owner_phone: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return delete_member(
         db=db,
         listing_id=listing_id,
         member_id=member_id,
-        owner_phone=owner_phone,
+        owner_id=current_user.id,
     )

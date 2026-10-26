@@ -146,7 +146,15 @@ class ListingResponse(BaseModel):
 
     description: str | None
 
+    monthly_price: int
+
     security_deposit: int | None
+
+    total_beds: int
+
+    available_beds: int
+
+    filled_beds: int
 
     # Each listing can have multiple sharing types.
     sharing: list[ListingSharingResponse]

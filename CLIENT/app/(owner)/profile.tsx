@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   Alert,
   Pressable,
@@ -17,6 +17,7 @@ import { useAuth } from "../../contexts/AuthContext";
 
 export default function OwnerProfileScreen() {
   const { logout } = useAuth();
+  const logoutInProgress = useRef(false);
 
   const [editing, setEditing] = useState(false);
 
@@ -257,6 +258,8 @@ export default function OwnerProfileScreen() {
           title="Logout"
           subtitle="Sign out of your owner account"
           onPress={() => {
+            if (logoutInProgress.current) return;
+
             Alert.alert(
               "Log out",
               "Are you sure you want to log out of your owner account?",
@@ -269,6 +272,9 @@ export default function OwnerProfileScreen() {
                   text: "Log out",
                   style: "destructive",
                   onPress: async () => {
+                    if (logoutInProgress.current) return;
+                    logoutInProgress.current = true;
+
                     try {
                       await logout();
                     } catch {
@@ -276,6 +282,8 @@ export default function OwnerProfileScreen() {
                         "Logout failed",
                         "Unable to clear your saved session. Please try again."
                       );
+                    } finally {
+                      logoutInProgress.current = false;
                     }
                   },
                 },

@@ -1,6 +1,11 @@
+
 import os
 import uuid
+from urllib.parse import quote
 
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -21,52 +26,75 @@ def validate_image_bytes(
     file_data: bytes,
     content_type: str,
 ) -> None:
-    """
-    Verify that the uploaded bytes actually represent
-    the image type that the client says it is sending.
-    """
-
     if not file_data:
         raise HTTPException(
             status_code=400,
             detail="Uploaded image is empty.",
         )
 
-    # JPEG
     if content_type == "image/jpeg":
-        if not file_data.startswith(b"\xff\xd8\xff"):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid JPEG image data.",
-            )
-
-    # PNG
+        valid = file_data.startswith(b"\xff\xd8\xff")
     elif content_type == "image/png":
-        if not file_data.startswith(
-            b"\x89PNG\r\n\x1a\n"
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid PNG image data.",
-            )
-
-    # WEBP
+        valid = file_data.startswith(b"\x89PNG\r\n\x1a\n")
     elif content_type == "image/webp":
-        if (
-            len(file_data) < 12
-            or file_data[0:4] != b"RIFF"
-            or file_data[8:12] != b"WEBP"
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid WEBP image data.",
-            )
-
+        valid = (
+            len(file_data) >= 12
+            and file_data[0:4] == b"RIFF"
+            and file_data[8:12] == b"WEBP"
+        )
     else:
+        valid = False
+
+    if not valid:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported image type.",
+            detail="Image data does not match its content type.",
         )
+
+
+def get_storage_config():
+    endpoint = os.getenv("AWS_ENDPOINT_URL_S3", "").strip()
+    bucket = os.getenv("NEON_STORAGE_BUCKET", "").strip()
+    region = os.getenv("AWS_REGION", "").strip()
+    access_key = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
+    secret_key = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
+
+    if not all((endpoint, bucket, region, access_key, secret_key)):
+        raise HTTPException(
+            status_code=503,
+            detail="Object storage is not configured correctly.",
+        )
+
+    if not endpoint.startswith("https://"):
+        raise HTTPException(
+            status_code=503,
+            detail="The object storage endpoint must use HTTPS.",
+        )
+
+    return endpoint.rstrip("/"), bucket, region, access_key, secret_key
+
+
+def create_storage_client():
+    endpoint, bucket, region, access_key, secret_key = (
+        get_storage_config()
+    )
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        region_name=region,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        config=Config(
+            signature_version="s3v4",
+            s3={"addressing_style": "path"},
+            connect_timeout=10,
+            read_timeout=30,
+            retries={"max_attempts": 2},
+        ),
+    )
+
+    return client, endpoint, bucket
 
 
 def save_listing_image_bytes(
@@ -75,63 +103,37 @@ def save_listing_image_bytes(
     image_type: ImageType,
     file_data: bytes,
     content_type: str,
+    owner_id: str,
     original_filename: str = "photo.jpg",
 ):
-    """
-    Save raw image bytes received from the mobile app.
-
-    This endpoint does NOT use:
-    - FormData
-    - multipart/form-data
-    - UploadFile
-    - FormDataPart
-    """
-
-    # Normalize content type
     content_type = (
-        content_type
-        .split(";")[0]
-        .strip()
-        .lower()
+        content_type.split(";")[0].strip().lower()
     )
 
-    # Validate content type
     if content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Only JPG, PNG and WEBP images "
-                "are supported."
-            ),
+            detail="Only JPG, PNG and WEBP images are supported.",
         )
 
-    # Validate size
-    max_size = (
-        settings.MAX_IMAGE_SIZE_MB
-        * 1024
-        * 1024
-    )
+    max_size = settings.MAX_IMAGE_SIZE_MB * 1024 * 1024
 
     if len(file_data) > max_size:
         raise HTTPException(
-            status_code=400,
+            status_code=413,
             detail=(
                 f"Image size cannot exceed "
                 f"{settings.MAX_IMAGE_SIZE_MB} MB."
             ),
         )
 
-    # Validate actual image bytes
-    validate_image_bytes(
-        file_data=file_data,
-        content_type=content_type,
-    )
+    validate_image_bytes(file_data, content_type)
 
-    # Make sure listing exists
     listing = (
         db.query(Listing)
         .filter(
-            Listing.id == listing_id
+            Listing.id == listing_id,
+            Listing.owner_id == owner_id,
         )
         .first()
     )
@@ -142,82 +144,90 @@ def save_listing_image_bytes(
             detail="Listing not found.",
         )
 
-    # Get correct extension
-    extension = ALLOWED_CONTENT_TYPES[
-        content_type
-    ]
-
-    # Create listing upload directory
-    listing_folder = os.path.join(
-        settings.UPLOAD_DIR,
-        "listings",
-        listing_id,
+    extension = ALLOWED_CONTENT_TYPES[content_type]
+    safe_type = image_type.value.lower()
+    object_key = (
+        f"listings/{listing_id}/{safe_type}/{uuid.uuid4()}{extension}"
     )
 
-    os.makedirs(
-        listing_folder,
-        exist_ok=True,
-    )
+    # Never trust a client-supplied path or filename.
+    clean_filename = os.path.basename(
+        (original_filename or "photo.jpg").replace("\\", "/")
+    )[:255]
 
-    # Generate unique filename
-    filename = (
-        f"{uuid.uuid4()}{extension}"
-    )
-
-    file_path = os.path.join(
-        listing_folder,
-        filename,
-    )
+    client = None
+    endpoint = ""
+    bucket = ""
+    uploaded = False
 
     try:
-        # Write actual image bytes
-        with open(
-            file_path,
-            "wb",
-        ) as image_file:
-            image_file.write(file_data)
+        client, endpoint, bucket = create_storage_client()
 
-        # URL exposed by FastAPI StaticFiles
+        # Upload the bytes before inserting the database row.
+        client.put_object(
+            Bucket=bucket,
+            Key=object_key,
+            Body=file_data,
+            ContentType=content_type,
+        )
+        uploaded = True
+
+        # This bucket must allow public reads for this URL format.
         image_url = (
-            f"/uploads/listings/"
-            f"{listing_id}/{filename}"
+            f"{endpoint}/{quote(bucket, safe='')}/"
+            f"{quote(object_key, safe='/')}"
         )
 
-        # Save database record
         image_record = ListingImage(
             listing_id=listing_id,
             image_url=image_url,
             image_type=image_type.value,
-            original_filename=(
-                original_filename
-                or filename
-            ),
+            original_filename=clean_filename or "photo.jpg",
         )
 
         db.add(image_record)
         db.commit()
         db.refresh(image_record)
 
-        print("IMAGE SAVED SUCCESSFULLY")
-        print("File:", file_path)
-        print("URL:", image_url)
-        print("DB ID:", image_record.id)
+        print(
+            "Listing image stored successfully:",
+            image_record.id,
+            object_key,
+        )
 
         return image_record
 
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except (BotoCoreError, ClientError) as error:
+        db.rollback()
+        print("Neon Object Storage upload failed:", repr(error))
+
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to upload the image to object storage.",
+        ) from error
+
     except Exception as error:
         db.rollback()
+        print("Listing image save failed:", repr(error))
 
-        # Delete partially written file
-        if os.path.exists(file_path):
+        # Avoid leaving an orphaned object if the DB insert fails.
+        if uploaded and client is not None:
             try:
-                os.remove(file_path)
-            except OSError:
-                pass
+                client.delete_object(
+                    Bucket=bucket,
+                    Key=object_key,
+                )
+            except Exception as cleanup_error:
+                print(
+                    "Object cleanup failed:",
+                    repr(cleanup_error),
+                )
 
-        print(
-            "IMAGE SAVE FAILED:",
-            error,
-        )
-
-        raise
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to save the listing image.",
+        ) from error

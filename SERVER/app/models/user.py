@@ -2,6 +2,7 @@
 import uuid
 
 from sqlalchemy import Boolean, Column, DateTime, String, func
+from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
@@ -55,6 +56,11 @@ class User(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    listings = relationship(
+        "Listing",
+        back_populates="owner",
     )
 
     def __repr__(self) -> str:

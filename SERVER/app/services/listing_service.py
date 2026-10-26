@@ -31,6 +31,7 @@ def normalize_phone(value: str | None) -> str:
 def find_duplicate_listing(
     db: Session,
     data: ListingCreate,
+    owner_id: str,
     exclude_listing_id: str | None = None,
 ) -> Listing | None:
     """Find another listing with the same owner and location/address."""
@@ -40,7 +41,7 @@ def find_duplicate_listing(
     area = normalize_text(data.area)
     address = normalize_text(data.address)
 
-    query = db.query(Listing)
+    query = db.query(Listing).filter(Listing.owner_id == owner_id)
 
     if exclude_listing_id:
         query = query.filter(Listing.id != exclude_listing_id)
@@ -67,10 +68,13 @@ def find_duplicate_listing(
 def create_listing(
     db: Session,
     data: ListingCreate,
+    owner_id: str,
+    owner_phone: str | None = None,
 ):
     existing_listing = find_duplicate_listing(
         db=db,
         data=data,
+        owner_id=owner_id,
     )
 
     if existing_listing:
@@ -121,7 +125,8 @@ def create_listing(
     # -------------------------------------------------------------------------
 
     listing = Listing(
-        owner_phone=data.owner_phone,
+        owner_id=owner_id,
+        owner_phone=owner_phone or data.owner_phone,
         name=data.name,
         property_type=data.property_type,
         gender=data.gender,
@@ -204,27 +209,28 @@ def update_listing(
     db: Session,
     listing_id: str,
     data: ListingCreate,
+    owner_id: str,
+    owner_phone: str | None = None,
 ):
     listing = (
         db.query(Listing)
-        .filter(Listing.id == listing_id)
+        .filter(
+            Listing.id == listing_id,
+            Listing.owner_id == owner_id,
+        )
         .first()
     )
 
     if not listing:
         return None, False
 
-    # Verify that the listing belongs to this owner.
-    if (
-        normalize_phone(listing.owner_phone)
-        != normalize_phone(data.owner_phone)
-    ):
-        raise PermissionError("You cannot update this property.")
+    listing.owner_phone = owner_phone or data.owner_phone
 
     # Check for another property at the submitted location.
     duplicate = find_duplicate_listing(
         db=db,
         data=data,
+        owner_id=owner_id,
         exclude_listing_id=listing_id,
     )
 
