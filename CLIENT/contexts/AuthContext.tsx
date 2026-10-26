@@ -1,4 +1,3 @@
-
 import React, {
   createContext,
   useCallback,
@@ -10,6 +9,7 @@ import React, {
 } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { ApiError } from "../constants/api";
+import { getPublicListings } from "../services/api";
 import {
   getSessionGeneration,
   isSessionEnding,
@@ -25,10 +25,7 @@ import {
   type UserRole,
 } from "../services/auth";
 
-type SessionStatus =
-  | "loading"
-  | "authenticated"
-  | "unauthenticated";
+type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 
 const SESSION_RESTORE_TIMEOUT_MS = 20000;
 
@@ -43,6 +40,12 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function preloadUserListings() {
+  void getPublicListings().catch((error: unknown) => {
+    console.warn("Unable to preload listings:", error);
+  });
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -56,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const isCurrentAttempt = () => attempt === restoreAttempt.current;
+
     const finishUnauthenticated = () => {
       if (!isCurrentAttempt()) {
         return;
@@ -76,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!isCurrentAttempt()) {
           return;
         }
+
         if (!token || isSessionEnding()) {
           finishUnauthenticated();
           return;
@@ -83,12 +88,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // A missing role can occur for a session created before role persistence.
         const savedRole = await getSavedUserRole();
+
+        if (savedRole !== "owner") {
+          preloadUserListings();
+        }
+
         const currentUser = await getCurrentUser();
 
         if (!isCurrentAttempt()) {
           return;
         }
-        if (generation !== getSessionGeneration() || isSessionEnding()) {
+
+        if (
+          generation !== getSessionGeneration() ||
+          isSessionEnding()
+        ) {
           finishUnauthenticated();
           return;
         }
@@ -102,16 +116,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await Promise.race([
         restoration,
         new Promise<never>((_, reject) => {
-          timeout = setTimeout(
-            () => {
-              if (isCurrentAttempt()) {
-                finishUnauthenticated();
-                restoreAttempt.current += 1;
-              }
-              reject(new Error("Session restoration timed out."));
-            },
-            SESSION_RESTORE_TIMEOUT_MS
-          );
+          timeout = setTimeout(() => {
+            if (isCurrentAttempt()) {
+              finishUnauthenticated();
+              restoreAttempt.current += 1;
+            }
+
+            reject(new Error("Session restoration timed out."));
+          }, SESSION_RESTORE_TIMEOUT_MS);
         }),
       ]);
     } catch (error) {
@@ -127,13 +139,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error.status === 401
       ) {
         void logoutUser().catch((cleanupError) => {
-          console.error("Unable to clear the invalid saved session.", cleanupError);
+          console.error(
+            "Unable to clear the invalid saved session.",
+            cleanupError
+          );
         });
       }
     } finally {
       if (timeout) {
         clearTimeout(timeout);
       }
+
       if (isCurrentAttempt() && !settled) {
         finishUnauthenticated();
       }
@@ -158,7 +174,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const completeLogin = useCallback(
     async (loggedInUser: AuthUser, selectedRole: UserRole) => {
       await saveUserRole(selectedRole);
+
+      // Invalidate any session restoration started before this login.
       restoreAttempt.current += 1;
+
+      if (selectedRole === "user") {
+        preloadUserListings();
+      }
+
       setUser(loggedInUser);
       setRole(selectedRole);
       setStatus("authenticated");
@@ -195,7 +218,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={styles.message}>Restoring your FindEasy session...</Text>
+        <Text style={styles.message}>
+          Restoring your FindEasy session...
+        </Text>
       </View>
     );
   }

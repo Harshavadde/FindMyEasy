@@ -115,5 +115,20 @@ export async function updateCurrentUser(
     throw new Error(detail);
   }
 
+  if (
+    typeof data?.phone !== "string" &&
+    !(phone === null && data?.phone === null)
+  ) {
+    throw new Error(
+      "Phone numbers are not supported by the server yet. Deploy or restart the updated backend, then try again."
+    );
+  }
+
+  if (data.phone !== phone) {
+    throw new Error(
+      "The server did not save your phone number. Please try again or contact support."
+    );
+  }
+
   return data as AuthUser;
 }

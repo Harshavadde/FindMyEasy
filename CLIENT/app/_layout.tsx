@@ -3,6 +3,7 @@ import "../global.css";
 import { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { LogBox } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
 
 LogBox.ignoreAllLogs(true);
@@ -57,8 +58,10 @@ function SessionRouter() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <SessionRouter />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <SessionRouter />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

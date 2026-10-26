@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { API_BASE_URL } from "../constants/api";
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Pressable,
@@ -10,15 +9,12 @@ import {
 } from "react-native";
 
 import type { Listing } from "../types/listing";
-import {
-  addFavorite,
-  getFavoriteIds,
-  removeFavorite,
-} from "../services/favorites";
+import { useFavoritesStore } from "../store/favoritesStore";
 
 type Props = {
   listing: Listing;
   onPress?: () => void;
+  onRemoveFavorite?: () => void;
 };
 
 function getReachableImageUrl(url?: string | null): string | undefined {
@@ -46,41 +42,36 @@ function getReachableImageUrl(url?: string | null): string | undefined {
 export default function ListingCard({
   listing,
   onPress,
+  onRemoveFavorite,
 }: Props) {
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const listingId = String(listing.id);
+  const storedIsFavorite = useFavoritesStore((state) =>
+    state.favoriteIds.has(listingId)
+  );
+  const isFavorite = Boolean(onRemoveFavorite) || storedIsFavorite;
+  const favoriteLoading = useFavoritesStore((state) =>
+    state.pendingIds.has(listingId)
+  );
+  const loadFavoriteIds = useFavoritesStore(
+    (state) => state.loadFavoriteIds
+  );
+  const toggleFavoriteInStore = useFavoritesStore(
+    (state) => state.toggleFavorite
+  );
 
   useEffect(() => {
-    let active = true;
-
-    getFavoriteIds()
-      .then((ids) => {
-        if (active) {
-          setIsFavorite(ids.includes(String(listing.id)));
-        }
-      })
-      .catch(() => {
-        // Keep the default state if favorites cannot be loaded.
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [listing.id]);
+    void loadFavoriteIds().catch(() => undefined);
+  }, [loadFavoriteIds]);
 
   const toggleFavorite = async () => {
     if (favoriteLoading) return;
-
-    setFavoriteLoading(true);
+    if (onRemoveFavorite) {
+      onRemoveFavorite();
+      return;
+    }
 
     try {
-      if (isFavorite) {
-        await removeFavorite(String(listing.id));
-        setIsFavorite(false);
-      } else {
-        await addFavorite(String(listing.id));
-        setIsFavorite(true);
-      }
+      await toggleFavoriteInStore(listingId, listing);
     } catch (error) {
       Alert.alert(
         "Favorites",
@@ -88,8 +79,6 @@ export default function ListingCard({
           ? error.message
           : "Unable to update favorites. Please try again."
       );
-    } finally {
-      setFavoriteLoading(false);
     }
   };
 
@@ -150,13 +139,9 @@ export default function ListingCard({
             shadowRadius: 4,
           }}
         >
-          {favoriteLoading ? (
-            <ActivityIndicator size="small" color="#E11D48" />
-          ) : (
-            <Text className="text-[25px]">
-              {isFavorite ? "❤️" : "♡"}
-            </Text>
-          )}
+          <Text className="text-[25px]">
+            {isFavorite ? "❤️" : "♡"}
+          </Text>
         </Pressable>
       </View>
 
