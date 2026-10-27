@@ -1,17 +1,45 @@
-{
+﻿{
   "expo": {
     "name": "FindMyEasy",
     "slug": "findmyeasy",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "findeasy",
+    "icon": "./assets/images/findmyeasy-logo.png",
+    "ios": {
+      "bundleIdentifier": "com.findmyeasy.app",
+      "config": {
+        "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
     "android": {
-      "package": "com.findmyeasy.app"
+      "package": "com.findmyeasy.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
+        }
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/findmyeasy-logo.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "plugins": [
       "expo-router",
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      "expo-secure-store",
+      [
+        "react-native-maps",
+        {
+          "iosGoogleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}",
+          "androidGoogleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
+        }
+      ],
+      "expo-status-bar"
     ],
     "web": {
       "bundler": "metro"
@@ -24,3 +52,4 @@
     }
   }
 }
+
