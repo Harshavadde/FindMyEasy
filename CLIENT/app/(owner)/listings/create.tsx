@@ -227,19 +227,71 @@ function parseTime(value: string): Date | null {
 
 
 function toMinutes(value: string): number | null {
-
   const date = parseTime(value);
 
   return date ? date.getHours() * 60 + date.getMinutes() : null;
-
 }
 
 
+type GooglePlaceSuggestion = {
+  placeId: string;
+  mainText: string;
+  secondaryText: string;
+  formattedAddress: string;
+};
+
+function normalizePlaceText(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseGooglePlaceSuggestion(prediction: any): GooglePlaceSuggestion | null {
+  const placeId = normalizePlaceText(prediction?.placeId ?? prediction?.id);
+  if (!placeId) return null;
+
+  const mainText = normalizePlaceText(
+    prediction?.structuredFormat?.mainText?.text ??
+      prediction?.text?.text ??
+      prediction?.description
+  );
+
+  const secondaryText = normalizePlaceText(
+    prediction?.structuredFormat?.secondaryText?.text ??
+      prediction?.text?.text ??
+      prediction?.description
+  );
+
+  const formattedAddress = [mainText, secondaryText]
+    .filter(Boolean)
+    .join(", ")
+    .trim();
+
+  return {
+    placeId,
+    mainText: mainText || "Selected location",
+    secondaryText: secondaryText || "Tap to use this place",
+    formattedAddress: formattedAddress || mainText || "Selected location",
+  };
+}
+
+function getCityAndAreaFromAddress(formattedAddress: string) {
+  const parts = formattedAddress
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return { city: "", area: "" };
+  }
+
+  const city = parts[parts.length - 2] || parts[parts.length - 3] || "";
+  const area = parts[parts.length - 3] || parts[parts.length - 4] || "";
+
+  return { city, area };
+}
 
 // ============================================================================
 
 // SCREEN
-
 // ============================================================================
 
 
@@ -357,7 +409,13 @@ const isEditMode = mode === "edit" && Boolean(listingId);
 
   const [locationSearch, setLocationSearch] = useState("");
 
+  const [placeSuggestions, setPlaceSuggestions] = useState<GooglePlaceSuggestion[]>([]);
+
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
+
+  const [isFetchingPlaceDetails, setIsFetchingPlaceDetails] = useState(false);
 
   const [mapRegion, setMapRegion] = useState<LocationRegion>(DEFAULT_REGION);
 
@@ -366,6 +424,12 @@ const isEditMode = mode === "edit" && Boolean(listingId);
     null
 
   );
+
+  const suggestionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const autocompleteRequestIdRef = useRef(0);
+
+  const placeDetailRequestIdRef = useRef(0);
 
 
 
@@ -381,8 +445,21 @@ const isEditMode = mode === "edit" && Boolean(listingId);
 
   const [isCreating, setIsCreating] = useState(false);
 
+  useEffect(() => {
+    return () => {
+      if (suggestionsDebounceRef.current) {
+        clearTimeout(suggestionsDebounceRef.current);
+      }
+    };
+  }, []);
 
-  
+  useEffect(() => {
+    if (!showLocationPicker) {
+      setPlaceSuggestions([]);
+      setIsFetchingSuggestions(false);
+    }
+  }, [showLocationPicker]);
+
   useEffect(() => {
     if (!isEditMode || !listingId) return;
 
@@ -1118,253 +1195,440 @@ const confirmSharingOption = (item: SharingPricing) => {
 
 
   const handleUseCurrentLocation = async () => {
-
     if (isGettingLocation) return;
 
-
-
     try {
-
       setIsGettingLocation(true);
-
-
 
       const { status } = await Location.requestForegroundPermissionsAsync();
 
-
-
       if (status !== "granted") {
-
         Alert.alert(
-
           "Location permission required",
-
           "Please allow location permission so we can save your property location."
-
         );
-
         return;
-
       }
 
-
-
       const position = await Location.getCurrentPositionAsync({
-
         accuracy: Location.Accuracy.High,
-
       });
 
+      const nextLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
 
+      setSelectedLocation(nextLocation);
+      setLatitude(nextLocation.latitude);
+      setLongitude(nextLocation.longitude);
+      setMapRegion({
+        ...nextLocation,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+      mapRef.current?.animateToRegion(
+        {
+          ...nextLocation,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        500
+      );
 
-      const lat = position.coords.latitude;
-
-      const lng = position.coords.longitude;
-
-
-
-      setLatitude(lat);
-
-      setLongitude(lng);
-
-
-
-      await fillAddressFromCoords(lat, lng);
-
+      await fillAddressFromCoords(nextLocation.latitude, nextLocation.longitude);
     } catch (err: unknown) {
-
       console.warn("Location error:", getErrorMessage(err, "Unknown error"));
 
-
-
       Alert.alert(
-
         "Unable to get location",
-
         "Please make sure your phone's location/GPS is turned on and try again."
-
       );
-
     } finally {
-
       setIsGettingLocation(false);
-
     }
-
   };
 
+  const handleMapLocationSelected = async (coordinate: LocationCoordinate) => {
+    setSelectedLocation(coordinate);
+    setMapRegion({
+      ...coordinate,
+      latitudeDelta: 0.008,
+      longitudeDelta: 0.008,
+    });
 
+    await fillAddressFromCoords(coordinate.latitude, coordinate.longitude);
+  };
 
   const openLocationPicker = () => {
-
     if (latitude !== null && longitude !== null) {
-
       const current = { latitude, longitude };
 
-
-
       setSelectedLocation(current);
-
       setMapRegion({
-
         ...current,
-
         latitudeDelta: 0.01,
-
         longitudeDelta: 0.01,
-
       });
-
     } else {
-
       setSelectedLocation(null);
-
     }
-
-
 
     setShowLocationPicker(true);
-
   };
 
+  const fetchPlaceSuggestions = async (query: string) => {
+    const trimmed = query.trim();
 
-
-  const handleSearchPropertyLocation = async () => {
-
-    const query = locationSearch.trim();
-
-
-
-    if (!query) {
-
-      Alert.alert(
-
-        "Enter a location",
-
-        "Please enter a property address, area, or city to search."
-
-      );
-
+    if (trimmed.length < 3) {
+      setPlaceSuggestions([]);
+      setIsFetchingSuggestions(false);
       return;
-
     }
 
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY?.trim();
+    const requestId = ++autocompleteRequestIdRef.current;
 
+    if (!apiKey) {
+      console.warn("Google Places API key missing; EXPO_PUBLIC_GOOGLE_PLACES_API_KEY is not configured.");
+      if (requestId === autocompleteRequestIdRef.current) {
+        setPlaceSuggestions([]);
+        setIsFetchingSuggestions(false);
+      }
+      Alert.alert(
+        "Google Places unavailable",
+        "Add EXPO_PUBLIC_GOOGLE_PLACES_API_KEY to the client .env file and restart Expo before searching by place name."
+      );
+      return;
+    }
+
+    setIsFetchingSuggestions(true);
+
+    try {
+      const response = await fetch(
+        "https://places.googleapis.com/v1/places:autocomplete",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask":
+              "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat",
+          },
+          body: JSON.stringify({
+            input: trimmed,
+            languageCode: "en",
+            regionCode: "IN",
+            locationBias: {
+              circle: {
+                center: { latitude: 17.385, longitude: 78.4867 },
+                radius: 2000000,
+              },
+            },
+            includedPrimaryTypes: [
+              "establishment",
+              "lodging",
+              "apartment_building",
+              "campground",
+              "locality",
+              "neighborhood",
+              "street_address",
+              "subpremise",
+            ],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Places autocomplete failed with ${response.status}${errorText ? `: ${errorText.slice(0, 300)}` : ""}`
+        );
+      }
+
+      const data = await response.json();
+      const suggestions = (data?.suggestions ?? [])
+        .map((item: any) => parseGooglePlaceSuggestion(item?.placePrediction ?? item))
+        .filter(Boolean) as GooglePlaceSuggestion[];
+
+      if (requestId !== autocompleteRequestIdRef.current) return;
+
+      setPlaceSuggestions(suggestions);
+      setLocationSearch(trimmed);
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, "Google Places autocomplete failed");
+      console.warn("Places autocomplete error:", message);
+
+      if (requestId === autocompleteRequestIdRef.current) {
+        setPlaceSuggestions([]);
+        Alert.alert("Search unavailable", message);
+      }
+    } finally {
+      if (requestId === autocompleteRequestIdRef.current) {
+        setIsFetchingSuggestions(false);
+      }
+    }
+  };
+
+  const handleSearchPropertyLocation = async () => {
+    const query = locationSearch.trim();
+
+    if (!query) {
+      Alert.alert(
+        "Enter a location",
+        "Please enter a property address, area, or city to search."
+      );
+      return;
+    }
 
     if (isSearchingLocation) return;
 
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY?.trim();
 
-
-    try {
-
+    if (apiKey) {
+      const requestId = ++autocompleteRequestIdRef.current;
       setIsSearchingLocation(true);
 
+      try {
+        const response = await fetch(
+          "https://places.googleapis.com/v1/places:autocomplete",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": apiKey,
+              "X-Goog-FieldMask":
+                "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat",
+            },
+            body: JSON.stringify({
+              input: query,
+              languageCode: "en",
+              regionCode: "IN",
+            }),
+          }
+        );
 
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `Places autocomplete failed with ${response.status}${errorText ? `: ${errorText.slice(0, 300)}` : ""}`
+          );
+        }
+
+        const data = await response.json();
+        const suggestions = (data?.suggestions ?? [])
+          .map((item: any) => parseGooglePlaceSuggestion(item?.placePrediction ?? item))
+          .filter(Boolean) as GooglePlaceSuggestion[];
+
+        if (requestId !== autocompleteRequestIdRef.current) return;
+
+        if (suggestions.length === 0) {
+          setPlaceSuggestions([]);
+          Alert.alert(
+            "Location not found",
+            "We couldn't find that location. Try a more specific address or area."
+          );
+          return;
+        }
+
+        const firstSuggestion = suggestions[0];
+        setPlaceSuggestions(suggestions);
+        await handleSelectSuggestedPlace(firstSuggestion);
+      } catch (error: unknown) {
+        const message = getErrorMessage(error, "Unknown error");
+        console.warn("Location search error:", message);
+
+        Alert.alert(
+          "Search failed",
+          `Unable to search this location. ${message}`
+        );
+      } finally {
+        if (requestId === autocompleteRequestIdRef.current) {
+          setIsSearchingLocation(false);
+        }
+      }
+
+      return;
+    }
+
+    Alert.alert(
+      "Google Places unavailable",
+      "Add EXPO_PUBLIC_GOOGLE_PLACES_API_KEY to the client .env file and restart Expo before searching by place name."
+    );
+
+    try {
+      setIsSearchingLocation(true);
 
       const results = await Location.geocodeAsync(query);
 
-
-
       if (!results.length) {
-
         Alert.alert(
-
           "Location not found",
-
           "We couldn't find that location. Try a more specific address or area."
-
         );
-
         return;
-
       }
 
-
-
       const { latitude: lat, longitude: lng } = results[0];
+      const nextLocation = { latitude: lat, longitude: lng };
 
-
-
-      setSelectedLocation({ latitude: lat, longitude: lng });
-
-
-
+      setSelectedLocation(nextLocation);
+      setMapRegion({
+        ...nextLocation,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
       mapRef.current?.animateToRegion(
-
         {
-
-          latitude: lat,
-
-          longitude: lng,
-
+          ...nextLocation,
           latitudeDelta: 0.01,
-
           longitudeDelta: 0.01,
-
         },
-
         500
-
       );
-
     } catch (err: unknown) {
-
       console.warn("Location search error:", getErrorMessage(err, "Unknown error"));
 
-
-
       Alert.alert(
-
         "Search failed",
-
         "Unable to search this location. Please try again."
-
       );
-
     } finally {
-
       setIsSearchingLocation(false);
-
     }
-
   };
 
-
-
-  const handleConfirmPropertyLocation = async () => {
-
-    if (!selectedLocation) {
-
-      Alert.alert(
-
-        "Select a location",
-
-        "Please search for the property or tap on the map to select its location."
-
-      );
-
+  const handleSelectSuggestedPlace = async (suggestion: GooglePlaceSuggestion) => {
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY?.trim();
+    if (!apiKey) {
+      setLocationSearch(suggestion.formattedAddress || suggestion.mainText);
+      setPlaceSuggestions([]);
       return;
-
     }
 
+    const requestId = ++placeDetailRequestIdRef.current;
+    setIsFetchingPlaceDetails(true);
+    setIsSearchingLocation(true);
+    setPlaceSuggestions([]);
 
+    try {
+      const response = await fetch(
+        `https://places.googleapis.com/v1/places/${encodeURIComponent(suggestion.placeId)}?fields=id,displayName,formattedAddress,addressComponents,location&key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Place details failed with ${response.status}`);
+      }
+
+      const data = await response.json();
+      const latitude = Number(data?.location?.latitude);
+      const longitude = Number(data?.location?.longitude);
+
+      if (requestId !== placeDetailRequestIdRef.current) return;
+
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error("Selected place has no valid coordinates");
+      }
+
+      const formattedAddress =
+        normalizePlaceText(data?.formattedAddress) ||
+        suggestion.formattedAddress ||
+        suggestion.mainText;
+
+      const nextLocation = { latitude, longitude };
+      const { city: derivedCity, area: derivedArea } = getCityAndAreaFromAddress(formattedAddress);
+
+      setSelectedLocation(nextLocation);
+      setLatitude(latitude);
+      setLongitude(longitude);
+      setLocationSearch(formattedAddress);
+      setAddress(formattedAddress);
+
+      const placeCity =
+        data?.addressComponents?.find((component: any) =>
+          component?.types?.includes("locality")
+        )?.longText ??
+        data?.addressComponents?.find((component: any) =>
+          component?.types?.includes("administrative_area_level_2")
+        )?.longText ??
+        derivedCity;
+
+      const placeArea =
+        data?.addressComponents?.find((component: any) =>
+          component?.types?.includes("sublocality") ||
+          component?.types?.includes("neighborhood") ||
+          component?.types?.includes("sublocality_level_1")
+        )?.longText ??
+        data?.addressComponents?.find((component: any) =>
+          component?.types?.includes("administrative_area_level_1")
+        )?.longText ??
+        derivedArea;
+
+      if (!city.trim()) {
+        setCity(placeCity || "");
+      }
+      if (!area.trim()) {
+        setArea(placeArea || "");
+      }
+
+      setMapRegion({
+        ...nextLocation,
+        latitudeDelta: 0.008,
+        longitudeDelta: 0.008,
+      });
+      mapRef.current?.animateToRegion(
+        {
+          ...nextLocation,
+          latitudeDelta: 0.008,
+          longitudeDelta: 0.008,
+        },
+        500
+      );
+    } catch (error: unknown) {
+      if (requestId !== placeDetailRequestIdRef.current) return;
+
+      console.warn(
+        "Place details error:",
+        getErrorMessage(error, "Google Places details failed")
+      );
+
+      Alert.alert(
+        "Location details unavailable",
+        "We could not load the selected place. You can still adjust the marker manually on the map."
+      );
+    } finally {
+      if (requestId === placeDetailRequestIdRef.current) {
+        setIsFetchingPlaceDetails(false);
+        setIsSearchingLocation(false);
+      }
+    }
+  };
+
+  const handleConfirmPropertyLocation = async () => {
+    if (!selectedLocation) {
+      Alert.alert(
+        "Select a location",
+        "Please search for the property or tap on the map to select its location."
+      );
+      return;
+    }
 
     const { latitude: lat, longitude: lng } = selectedLocation;
 
-
-
     setLatitude(lat);
-
     setLongitude(lng);
-
     setShowLocationPicker(false);
 
-
-
-    await fillAddressFromCoords(lat, lng);
-
+    if (!city.trim()) {
+      await fillAddressFromCoords(lat, lng);
+    }
   };
-
 
 
   const handleOpenGoogleMaps = async () => {
@@ -2444,52 +2708,106 @@ const confirmSharingOption = (item: SharingPricing) => {
 
 
 
-            <View className="mt-4 flex-row">
+            <View className="mt-4">
+              <View className="flex-row">
+                <View className="flex-1 flex-row items-center rounded-[14px] bg-[#F8FAFC] px-3" style={{ height: 50, borderWidth: 1, borderColor: "#E2E8F0" }}>
+                  <Text className="mr-2 text-[16px]">🔍</Text>
+                  <TextInput
+                    value={locationSearch}
+                    onChangeText={(text) => {
+                      setLocationSearch(text);
 
-              <TextInput
+                      if (suggestionsDebounceRef.current) {
+                        clearTimeout(suggestionsDebounceRef.current);
+                      }
 
-                value={locationSearch}
+                      if (text.trim().length >= 3) {
+                        suggestionsDebounceRef.current = setTimeout(() => {
+                          void fetchPlaceSuggestions(text);
+                        }, 350);
+                      } else {
+                        setPlaceSuggestions([]);
+                        setIsFetchingSuggestions(false);
+                      }
+                    }}
+                    placeholder="Search places, streets, landmarks..."
+                    placeholderTextColor="#94A3B8"
+                    returnKeyType="search"
+                    onSubmitEditing={handleSearchPropertyLocation}
+                    className="flex-1 text-[14px] text-[#0F172A]"
+                    style={{ marginRight: locationSearch.trim() ? 8 : 0 }}
+                  />
+                  {locationSearch.trim() ? (
+                    <Pressable
+                      onPress={() => {
+                        setLocationSearch("");
+                        setPlaceSuggestions([]);
+                        setIsFetchingSuggestions(false);
+                        if (suggestionsDebounceRef.current) {
+                          clearTimeout(suggestionsDebounceRef.current);
+                        }
+                      }}
+                      className="ml-2 h-7 w-7 items-center justify-center rounded-full bg-[#E2E8F0]"
+                    >
+                      <Text className="text-[14px] font-bold text-[#475569]">×</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
 
-                onChangeText={setLocationSearch}
+                <Pressable
+                  onPress={handleSearchPropertyLocation}
+                  disabled={isSearchingLocation}
+                  className="ml-2 h-[50px] w-[54px] items-center justify-center rounded-[14px] bg-[#2563EB]"
+                >
+                  {isSearchingLocation ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text className="text-[20px]">🔍</Text>
+                  )}
+                </Pressable>
+              </View>
 
-                placeholder="Search property location..."
+              {locationSearch.trim().length >= 3 && (
+                <View className="mt-2 rounded-[14px] border border-[#E2E8F0] bg-white shadow-sm">
+                  {isFetchingSuggestions && (
+                    <View className="flex-row items-center px-4 py-3">
+                      <ActivityIndicator size="small" color="#2563EB" />
+                      <Text className="ml-2 text-[12px] font-medium text-[#475569]">
+                        Loading nearby suggestions...
+                      </Text>
+                    </View>
+                  )}
 
-                placeholderTextColor="#94A3B8"
+                  {!isFetchingSuggestions && placeSuggestions.length === 0 && (
+                    <View className="px-4 py-3">
+                      <Text className="text-[12px] text-[#64748B]">
+                        No places found for this search.
+                      </Text>
+                    </View>
+                  )}
 
-                returnKeyType="search"
-
-                onSubmitEditing={handleSearchPropertyLocation}
-
-                className="flex-1 rounded-[14px] bg-[#F8FAFC] px-4 text-[14px] text-[#0F172A]"
-
-                style={{ height: 50, borderWidth: 1, borderColor: "#E2E8F0" }}
-
-              />
-
-
-
-              <Pressable
-
-                onPress={handleSearchPropertyLocation}
-
-                disabled={isSearchingLocation}
-
-                className="ml-2 h-[50px] w-[54px] items-center justify-center rounded-[14px] bg-[#2563EB]"
-
-              >
-
-                {isSearchingLocation ? (
-
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-
-                ) : (
-
-                  <Text className="text-[20px]">🔍</Text>
-
-                )}
-
-              </Pressable>
-
+                  {!isFetchingSuggestions &&
+                    placeSuggestions.map((suggestion) => (
+                      <Pressable
+                        key={suggestion.placeId}
+                        onPress={() => void handleSelectSuggestedPlace(suggestion)}
+                        className="flex-row items-start border-t border-[#F1F5F9] px-4 py-3"
+                      >
+                        <View className="mt-0.5 mr-2 h-6 w-6 items-center justify-center rounded-full bg-[#EFF6FF]">
+                          <Text className="text-[12px]">📍</Text>
+                        </View>
+                        <View className="flex-1">
+                          <Text className="text-[13px] font-extrabold text-[#0F172A]">
+                            {suggestion.mainText}
+                          </Text>
+                          <Text className="mt-1 text-[11px] text-[#64748B]">
+                            {suggestion.secondaryText}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                </View>
+              )}
             </View>
 
           </View>
@@ -2502,7 +2820,9 @@ const confirmSharingOption = (item: SharingPricing) => {
               ref={mapRef}
               initialRegion={mapRegion}
               selectedLocation={selectedLocation}
-              onLocationSelected={setSelectedLocation}
+              onLocationSelected={(coordinate) => {
+                void handleMapLocationSelected(coordinate);
+              }}
             />
 
 
@@ -2578,21 +2898,23 @@ const confirmSharingOption = (item: SharingPricing) => {
 
 
             <Pressable
-
               onPress={handleConfirmPropertyLocation}
-
+              disabled={!selectedLocation || isFetchingPlaceDetails}
               className="h-[54px] items-center justify-center rounded-[16px] bg-[#2563EB]"
-
-              style={{ opacity: selectedLocation ? 1 : 0.5 }}
-
+              style={{ opacity: selectedLocation && !isFetchingPlaceDetails ? 1 : 0.5 }}
             >
-
-              <Text className="text-[15px] font-extrabold text-white">
-
-                Confirm Property Location
-
-              </Text>
-
+              {isFetchingPlaceDetails ? (
+                <View className="flex-row items-center">
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Text className="ml-2 text-[15px] font-extrabold text-white">
+                    Loading place details...
+                  </Text>
+                </View>
+              ) : (
+                <Text className="text-[15px] font-extrabold text-white">
+                  Confirm Property Location
+                </Text>
+              )}
             </Pressable>
 
           </View>
