@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "project": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "89855000000016028",
+      "name": "FindEasy",
+      "domain": {
+        "id": "10137192097",
+        "name": "findeasy-943827075.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "943827075",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    }
+  ]
+}
