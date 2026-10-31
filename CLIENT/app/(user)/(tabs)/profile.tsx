@@ -150,7 +150,9 @@ export default function ProfileScreen() {
           <Text style={styles.name}>
             {fullName || "Name not provided"}
           </Text>
-          <Text style={styles.email}>{user.email}</Text>
+          <Text style={styles.phoneNumber}>
+            {user.phone_number || "Phone number not available"}
+          </Text>
 
           {!fullName ? (
             <Text style={styles.missingText}>
@@ -183,14 +185,16 @@ export default function ProfileScreen() {
           <View style={styles.detailRow}>
             <View style={styles.iconBox}>
               <MaterialCommunityIcons
-                name="email-outline"
+                name="phone-outline"
                 size={22}
                 color="#2563EB"
               />
             </View>
             <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Email address</Text>
-              <Text style={styles.detailValue}>{user.email}</Text>
+              <Text style={styles.detailLabel}>Sign-in phone number</Text>
+              <Text style={styles.detailValue}>
+                {user.phone_number || "Not provided"}
+              </Text>
             </View>
           </View>
 
@@ -270,7 +274,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: "#1D4ED8", fontSize: 27, fontWeight: "800" },
   name: { fontSize: 21, fontWeight: "700", color: "#0F172A", textAlign: "center" },
-  email: { fontSize: 14, color: "#64748B", marginTop: 7, textAlign: "center" },
+  phoneNumber: { fontSize: 14, color: "#64748B", marginTop: 7, textAlign: "center" },
   missingText: { fontSize: 12, color: "#B45309", marginTop: 10, textAlign: "center" },
   sectionTitle: { fontSize: 17, fontWeight: "700", color: "#0F172A", marginTop: 25, marginBottom: 11 },
   detailsCard: {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,13 +10,17 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  type TextInputInstance,
   View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
-import { loginUser } from "../../services/auth";
+import {
+  getIndianPhoneInputValue,
+  loginWithPhonePassword,
+  normalizeIndianPhoneNumber,
+  type UserRole,
+} from "../../services/auth";
 
 const COLORS = {
   primary: "#2563EB",
@@ -25,66 +29,45 @@ const COLORS = {
   text: "#0F172A",
   secondary: "#64748B",
   border: "#CBD5E1",
-  error: "#DC2626",
 };
 
 export default function Login() {
   const { completeLogin } = useAuth();
-  const { role } = useLocalSearchParams<{
-    role?: "user" | "owner";
-  }>();
-
-  const passwordRef = useRef<TextInputInstance | null>(null);
-
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
 
   async function handleLogin() {
     Keyboard.dismiss();
-    setErrorMessage("");
-
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!normalizedEmail || !password) {
-      setErrorMessage("Please enter your email address and password.");
+    let phoneNumber: string;
+    try {
+      phoneNumber = normalizeIndianPhoneNumber(phone);
+    } catch {
+      Alert.alert(
+        "Check your phone number",
+        "Enter a valid Indian mobile number as 10 digits or +91 followed by 10 digits."
+      );
       return;
     }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      setErrorMessage("Please enter a valid email address.");
-      return;
-    }
-
-    if (role !== "user" && role !== "owner") {
-      Alert.alert("Select a role", "Please choose User or Owner first.");
+    if (!password) {
+      Alert.alert("Enter your password", "Your password is required to sign in.");
       return;
     }
 
     try {
       setLoading(true);
-
-
-      const result = await loginUser({
-        email: normalizedEmail,
+      const result = await loginWithPhonePassword({
+        phone_number: phoneNumber,
         password,
       });
-
-      // Save the selected role and update the in-memory session.
+      const role: UserRole =
+        result.user.user_role === "OWNER" ? "owner" : "user";
       await completeLogin(result.user, role);
-
-      if (role === "owner") {
-        router.replace("/(owner)");
-      } else {
-        router.replace("/(user)/home");
-      }
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Login failed. Please try again."
+      Alert.alert(
+        "Unable to sign in",
+        error instanceof Error ? error.message : "Please try again."
       );
     } finally {
       setLoading(false);
@@ -93,13 +76,6 @@ export default function Login() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Tapping the background dismisses the keyboard. */}
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={Keyboard.dismiss}
-        accessible={false}
-      />
-
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -107,109 +83,81 @@ export default function Login() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
             <View style={styles.logo}>
               <Text style={styles.logoText}>F</Text>
             </View>
-
             <Text style={styles.brand}>FindEasy</Text>
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>
-              Sign in to discover your next place to stay.
+              Sign in with your phone number and password.
             </Text>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Email address</Text>
+            <Text style={styles.label}>Phone number</Text>
+            <View style={styles.phoneContainer}>
+              <Text style={styles.countryCode}>+91</Text>
               <TextInput
-                style={styles.input}
-                placeholder="you@example.com"
+                style={styles.phoneInput}
+                placeholder="10-digit mobile number"
                 placeholderTextColor="#94A3B8"
-                value={email}
-                onChangeText={(value) => {
-                  setEmail(value);
-                  setErrorMessage("");
-                }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-                textContentType="emailAddress"
-                returnKeyType="next"
-                onSubmitEditing={() => passwordRef.current?.focus()}
+                value={phone}
+                onChangeText={(value) =>
+                  setPhone(getIndianPhoneInputValue(value))
+                }
+                keyboardType="number-pad"
+                textContentType="telephoneNumber"
+                autoComplete="tel-national"
+                maxLength={13}
+                returnKeyType="done"
+                onSubmitEditing={() => void handleLogin()}
                 editable={!loading}
-                accessibilityLabel="Email address"
+                accessibilityLabel="Indian phone number"
               />
             </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
-
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  ref={passwordRef}
-                  style={styles.passwordInput}
-                  placeholder="Enter your password"
-                  placeholderTextColor="#94A3B8"
-                  value={password}
-                  onChangeText={(value) => {
-                    setPassword(value);
-                    setErrorMessage("");
-                  }}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="current-password"
-                  textContentType="password"
-                  returnKeyType="done"
-                  onSubmitEditing={handleLogin}
-                  editable={!loading}
-                  accessibilityLabel="Password"
-                />
-
-                <Pressable
-                  style={styles.visibilityButton}
-                  onPress={() => setShowPassword((current) => !current)}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    showPassword ? "Hide password" : "Show password"
-                  }
-                >
-                  <Text style={styles.visibilityText}>
-                    {showPassword ? "Hide" : "Show"}
-                  </Text>
-                </Pressable>
-              </View>
+            <Text style={[styles.label, styles.spacedLabel]}>Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor="#94A3B8"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!passwordVisible}
+                textContentType="password"
+                autoComplete="current-password"
+                returnKeyType="go"
+                onSubmitEditing={() => void handleLogin()}
+                editable={!loading}
+                accessibilityLabel="Password"
+              />
+              <Pressable
+                style={styles.passwordVisibilityButton}
+                onPress={() => setPasswordVisible((visible) => !visible)}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  passwordVisible ? "Hide password" : "Show password"
+                }
+              >
+                <Text style={styles.passwordVisibilityText}>
+                  {passwordVisible ? "Hide" : "Show"}
+                </Text>
+              </Pressable>
             </View>
 
             <Pressable
-              style={styles.forgotButton}
-              onPress={() => {
-                Keyboard.dismiss();
-                router.push("/(auth)/forgot-password");
-              }}
-            >
-              <Text style={styles.forgotText}>Forgot password?</Text>
-            </Pressable>
-
-            {errorMessage ? (
-              <Text accessibilityRole="alert" style={styles.error}>
-                {errorMessage}
-              </Text>
-            ) : null}
-
-            <Pressable
               style={[styles.primaryButton, loading && styles.disabledButton]}
-              onPress={handleLogin}
+              onPress={() => void handleLogin()}
               disabled={loading}
               accessibilityRole="button"
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.primaryButtonText}>Sign in</Text>
+                <Text style={styles.primaryButtonText}>Log in</Text>
               )}
             </Pressable>
 
@@ -217,13 +165,7 @@ export default function Login() {
               <Text style={styles.footerText}>New to FindEasy? </Text>
               <Pressable
                 disabled={loading}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  router.push({
-                    pathname: "/(auth)/signup",
-                    params: { role: role ?? "user" },
-                  });
-                }}
+                onPress={() => router.push("/(auth)/signup")}
               >
                 <Text style={styles.link}>Create account</Text>
               </Pressable>
@@ -236,13 +178,8 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  flex: {
-    flex: 1,
-  },
+  safeArea: { flex: 1, backgroundColor: COLORS.background },
+  flex: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
@@ -268,23 +205,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 12,
   },
-  logoText: {
-    color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "800",
-  },
+  logoText: { color: "#FFFFFF", fontSize: 28, fontWeight: "800" },
   brand: {
     fontSize: 17,
     fontWeight: "700",
     color: COLORS.primary,
     marginBottom: 22,
   },
-  title: {
-    fontSize: 27,
-    fontWeight: "800",
-    color: COLORS.text,
-    letterSpacing: -0.5,
-  },
+  title: { fontSize: 27, fontWeight: "800", color: COLORS.text },
   subtitle: {
     fontSize: 15,
     color: COLORS.secondary,
@@ -292,27 +220,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 28,
   },
-  field: {
-    marginBottom: 18,
-  },
   label: {
     fontSize: 14,
     fontWeight: "600",
     color: COLORS.text,
     marginBottom: 8,
   },
-  input: {
-    height: 54,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    backgroundColor: "#FFFFFF",
-    color: COLORS.text,
-    fontSize: 16,
-  },
+  spacedLabel: { marginTop: 18 },
   passwordContainer: {
-    minHeight: 54,
+    height: 54,
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
@@ -322,37 +238,42 @@ const styles = StyleSheet.create({
   },
   passwordInput: {
     flex: 1,
-    minWidth: 0,
     height: 52,
     paddingHorizontal: 15,
     color: COLORS.text,
     fontSize: 16,
   },
-  visibilityButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  passwordVisibilityButton: {
+    height: 52,
+    justifyContent: "center",
+    paddingHorizontal: 15,
   },
-  visibilityText: {
+  passwordVisibilityText: {
     color: COLORS.primary,
     fontSize: 14,
     fontWeight: "700",
   },
-  forgotButton: {
-    alignSelf: "flex-end",
-    paddingVertical: 5,
-    marginTop: -8,
-    marginBottom: 18,
+  phoneContainer: {
+    height: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
   },
-  forgotText: {
-    color: COLORS.primary,
-    fontSize: 14,
+  countryCode: {
+    paddingHorizontal: 14,
+    color: COLORS.text,
+    fontSize: 16,
     fontWeight: "600",
   },
-  error: {
-    color: COLORS.error,
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 14,
+  phoneInput: {
+    flex: 1,
+    height: 52,
+    paddingHorizontal: 12,
+    color: COLORS.text,
+    fontSize: 16,
   },
   primaryButton: {
     height: 54,
@@ -360,30 +281,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
+    marginTop: 20,
   },
-  disabledButton: {
-    opacity: 0.65,
-  },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  disabledButton: { opacity: 0.65 },
+  primaryButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    flexWrap: "wrap",
     marginTop: 24,
   },
-  footerText: {
-    color: COLORS.secondary,
-    fontSize: 14,
-  },
-  link: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: "700",
-  },
+  footerText: { color: COLORS.secondary, fontSize: 14 },
+  link: { color: COLORS.primary, fontSize: 14, fontWeight: "700" },
 });

@@ -23,7 +23,7 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const [authPhoneNumber, setAuthPhoneNumber] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -41,7 +41,7 @@ export default function EditProfileScreen() {
           if (active) {
             setFullName(user.full_name ?? "");
             setPhone(user.phone ?? "");
-            setEmail(user.email);
+            setAuthPhoneNumber(user.phone_number ?? "");
           }
         } catch (err) {
           if (active) {
@@ -192,16 +192,16 @@ export default function EditProfileScreen() {
               Enter a 10-digit Indian mobile number beginning with 6, 7, 8, or 9.
             </Text>
 
-            <Text style={[styles.label, styles.emailLabel]}>
-              Email address
+            <Text style={[styles.label, styles.authPhoneLabel]}>
+              Sign-in phone number
             </Text>
             <View style={styles.readOnlyField}>
               <MaterialCommunityIcons
-                name="email-outline"
+                name="phone-outline"
                 size={20}
                 color="#64748B"
               />
-              <Text style={styles.emailText}>{email}</Text>
+              <Text style={styles.authPhoneText}>{authPhoneNumber}</Text>
               <MaterialCommunityIcons
                 name="lock-outline"
                 size={17}
@@ -209,7 +209,7 @@ export default function EditProfileScreen() {
               />
             </View>
             <Text style={styles.hint}>
-              Email address cannot be changed here.
+              Contact support to change your verified sign-in number.
             </Text>
 
             {error ? (
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     color: "#0F172A",
     fontSize: 15,
   },
-  emailLabel: { marginTop: 25 },
+  authPhoneLabel: { marginTop: 25 },
   readOnlyField: {
     minHeight: 52,
     borderWidth: 1,
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  emailText: { flex: 1, color: "#64748B", fontSize: 14 },
+  authPhoneText: { flex: 1, color: "#64748B", fontSize: 14 },
   hint: { color: "#94A3B8", fontSize: 12, marginTop: 7 },
   error: { color: "#DC2626", fontSize: 13, marginTop: 16, lineHeight: 19 },
   saveButton: {

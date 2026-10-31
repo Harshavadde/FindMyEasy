@@ -12,8 +12,9 @@ export type UserRole = "user" | "owner";
 
 export type AuthUser = {
   id: string;
-  email: string;
   full_name: string | null;
+  phone_number: string | null;
+  user_role: "SEEKER" | "OWNER";
   phone: string | null;
 };
 
@@ -23,21 +24,61 @@ export type AuthResponse = {
   user: AuthUser;
 };
 
-export async function registerUser(data: {
-  full_name: string;
-  email: string;
-  password: string;
-}): Promise<AuthResponse> {
-  return postJson<AuthResponse>("/api/v1/auth/register", data);
+export function normalizeIndianPhoneNumber(value: string): string {
+  const phoneNumber = value.trim();
+
+  if (/^[6-9]\d{9}$/.test(phoneNumber)) {
+    return `+91${phoneNumber}`;
+  }
+  if (/^\+91[6-9]\d{9}$/.test(phoneNumber)) {
+    return phoneNumber;
+  }
+
+  throw new Error(
+    "Enter a valid Indian mobile number as 10 digits or +91 followed by 10 digits."
+  );
 }
 
-export async function loginUser(data: {
-  email: string;
-  password: string;
-}): Promise<AuthResponse> {
-  const result = await postJson<AuthResponse>("/api/v1/auth/login", data);
+export function getIndianPhoneInputValue(value: string): string {
+  const trimmedValue = value.trim();
+  const nationalNumber = trimmedValue.startsWith("+91")
+    ? trimmedValue.slice(3)
+    : trimmedValue;
+
+  return nationalNumber.replace(/\D/g, "").slice(0, 10);
+}
+
+async function authenticateWithPhonePassword(
+  path: "/api/v1/auth/register" | "/api/v1/auth/login",
+  data: {
+    phone_number: string;
+    password: string;
+    full_name?: string;
+    user_role?: "SEEKER" | "OWNER";
+  }
+): Promise<AuthResponse> {
+  const result = await postJson<AuthResponse>(path, {
+    ...data,
+    phone_number: normalizeIndianPhoneNumber(data.phone_number),
+  });
   await saveAccessToken(result.access_token);
   return result;
+}
+
+export async function registerWithPhonePassword(data: {
+  phone_number: string;
+  password: string;
+  full_name: string;
+  user_role: "SEEKER" | "OWNER";
+}): Promise<AuthResponse> {
+  return authenticateWithPhonePassword("/api/v1/auth/register", data);
+}
+
+export async function loginWithPhonePassword(data: {
+  phone_number: string;
+  password: string;
+}): Promise<AuthResponse> {
+  return authenticateWithPhonePassword("/api/v1/auth/login", data);
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
@@ -70,7 +111,7 @@ export async function logoutUser(): Promise<void> {
 
 export async function updateCurrentUser(
   fullName: string,
-  phone: string | null
+  phone?: string | null
 ): Promise<AuthUser> {
   const token = await getSavedToken();
 
@@ -90,7 +131,7 @@ export async function updateCurrentUser(
       },
       body: JSON.stringify({
         full_name: fullName.trim(),
-        phone,
+        ...(phone !== undefined ? { phone } : {}),
       }),
     });
   } catch {
@@ -115,16 +156,7 @@ export async function updateCurrentUser(
     throw new Error(detail);
   }
 
-  if (
-    typeof data?.phone !== "string" &&
-    !(phone === null && data?.phone === null)
-  ) {
-    throw new Error(
-      "Phone numbers are not supported by the server yet. Deploy or restart the updated backend, then try again."
-    );
-  }
-
-  if (data.phone !== phone) {
+  if (phone !== undefined && data.phone !== phone) {
     throw new Error(
       "The server did not save your phone number. Please try again or contact support."
     );
