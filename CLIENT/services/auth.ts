@@ -14,7 +14,7 @@ export type AuthUser = {
   id: string;
   full_name: string | null;
   phone_number: string | null;
-  user_role: "SEEKER" | "OWNER";
+  user_role: string;
   phone: string | null;
 };
 
@@ -23,6 +23,10 @@ export type AuthResponse = {
   token_type: string;
   user: AuthUser;
 };
+
+export function getUserRole(user: Pick<AuthUser, "user_role">): UserRole {
+  return user.user_role.trim().toUpperCase() === "OWNER" ? "owner" : "user";
+}
 
 export function normalizeIndianPhoneNumber(value: string): string {
   const phoneNumber = value.trim();

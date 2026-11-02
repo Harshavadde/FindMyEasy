@@ -234,6 +234,7 @@ export default function Signup() {
                 onPress={() =>
                   router.replace({
                     pathname: "/(auth)/login",
+                    params: { role },
                   })
                 }
               >

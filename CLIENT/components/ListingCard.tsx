@@ -7,14 +7,21 @@ import {
   Text,
   View,
 } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import type { Listing } from "../types/listing";
+import type { ListingProximityBadge } from "../services/api";
 import { useFavoritesStore } from "../store/favoritesStore";
 
 type Props = {
   listing: Listing;
   onPress?: () => void;
   onRemoveFavorite?: () => void;
+  compact?: boolean;
+  proximityBadge?: ListingProximityBadge | null;
+  distanceLabel?: string;
+  imageHeight?: number;
+  elevated?: boolean;
 };
 
 function getReachableImageUrl(url?: string | null): string | undefined {
@@ -43,6 +50,11 @@ export default function ListingCard({
   listing,
   onPress,
   onRemoveFavorite,
+  compact = false,
+  proximityBadge,
+  distanceLabel,
+  imageHeight,
+  elevated = false,
 }: Props) {
   const listingId = String(listing.id);
   const storedIsFavorite = useFavoritesStore((state) =>
@@ -88,23 +100,66 @@ export default function ListingCard({
     ) ?? listing.images?.[0];
 
   const coverImageUrl = getReachableImageUrl(coverImage?.url);
+  const resolvedImageHeight =
+    imageHeight ?? (compact ? 140 : 190);
+  const sharingPrices = (listing.sharing ?? [])
+    .map((sharing) => Number(sharing.monthly_price))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  const startingPrice =
+    sharingPrices.length > 0
+      ? Math.min(...sharingPrices)
+      : Number(listing.monthly_price);
 
   console.log("FindEasy cover image URL:", coverImage?.url);
+  const proximityLabel =
+    proximityBadge?.name;
+  const proximityIcon =
+    proximityBadge?.type === "bus"
+      ? "bus"
+      : proximityBadge?.type === "railway"
+        ? "train"
+      : proximityBadge?.type === "education"
+        ? "school-outline"
+        : proximityBadge?.type === "landmark"
+          ? "office-building"
+          : "train";
+  const proximityColor =
+    proximityBadge?.type === "education"
+      ? "#FBBF24"
+      : proximityBadge?.type === "bus"
+        ? "#34D399"
+        : proximityBadge?.type === "railway"
+          ? "#FB923C"
+      : proximityBadge?.type === "landmark"
+        ? "#C084FC"
+        : "#60A5FA";
 
   return (
     <Pressable
       onPress={onPress}
-      className="mb-4 overflow-hidden rounded-[20px] bg-white"
+      className={`mb-4 overflow-hidden bg-white ${
+        compact ? "rounded-[18px]" : "rounded-[20px]"
+      }`}
       style={{
         borderWidth: 1,
         borderColor: "#E8EEF5",
+        ...(elevated
+          ? {
+              elevation: 3,
+              shadowColor: "#0F172A",
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 3 },
+            }
+          : {}),
       }}
     >
       <View>
         {coverImageUrl ? (
           <Image
             source={{ uri: coverImageUrl }}
-            className="h-[190px] w-full"
+            className="w-full"
+            style={{ height: resolvedImageHeight }}
             resizeMode="cover"
             onError={(event) => {
               console.log(
@@ -115,13 +170,61 @@ export default function ListingCard({
             }}
           />
         ) : (
-          <View className="h-[190px] w-full items-center justify-center bg-[#EAF2FF]">
+          <View
+            className="w-full items-center justify-center bg-[#EAF2FF]"
+            style={{ height: resolvedImageHeight }}
+          >
             <Text className="text-[40px]">🏠</Text>
             <Text className="mt-2 text-[12px] font-bold text-[#64748B]">
               No property photo
             </Text>
           </View>
         )}
+
+        {proximityBadge ? (
+          <View
+            accessibilityLabel={`${proximityBadge.distance_m} meters from ${
+              proximityLabel ?? "nearby place"
+            }`}
+            className="absolute left-3 top-3 max-w-[75%] flex-row items-center rounded-[7px] bg-[#111827]/90 px-2.5 py-1.5"
+          >
+            <MaterialCommunityIcons
+              name={proximityIcon}
+              size={compact ? 13 : 15}
+              color={proximityColor}
+            />
+            <Text
+              numberOfLines={1}
+              className="ml-1 text-[10px] font-extrabold text-white"
+            >
+              {proximityBadge.distance_m < 1000
+                ? `${Math.max(
+                    10,
+                    Math.round(proximityBadge.distance_m / 10) * 10
+                  )}m`
+                : `${(proximityBadge.distance_m / 1000).toFixed(1)}km`}{" "}
+              {proximityLabel}
+            </Text>
+          </View>
+        ) : null}
+
+        {distanceLabel ? (
+          <View
+            accessibilityLabel={`${distanceLabel} from your current location`}
+            className="absolute left-3 top-3 flex-row items-center rounded-full border border-white/40 bg-[#0F172A]/90 py-1.5 pl-1.5 pr-3"
+          >
+            <View className="h-6 w-6 items-center justify-center rounded-full bg-[#2563EB]">
+              <MaterialCommunityIcons
+                name="map-marker"
+                size={14}
+                color="#FFFFFF"
+              />
+            </View>
+            <Text className="ml-1.5 text-[11px] font-extrabold text-white">
+              {distanceLabel}
+            </Text>
+          </View>
+        ) : null}
 
         <Pressable
           onPress={toggleFavorite}
@@ -131,7 +234,9 @@ export default function ListingCard({
             isFavorite ? "Remove from favorites" : "Add to favorites"
           }
           hitSlop={8}
-          className="absolute right-3 top-3 h-11 w-11 items-center justify-center rounded-full bg-white"
+          className={`absolute right-3 top-3 items-center justify-center rounded-full bg-white ${
+            compact ? "h-9 w-9" : "h-11 w-11"
+          }`}
           style={{
             elevation: 3,
             shadowColor: "#000",
@@ -139,24 +244,26 @@ export default function ListingCard({
             shadowRadius: 4,
           }}
         >
-          <Text className="text-[25px]">
+          <Text className={compact ? "text-[21px]" : "text-[25px]"}>
             {isFavorite ? "❤️" : "♡"}
           </Text>
         </Pressable>
       </View>
 
-      <View className="p-4">
+      <View className={compact ? "p-4" : "p-5"}>
         <View className="flex-row items-start justify-between">
           <View className="flex-1 pr-3">
             <Text
-              className="text-[17px] font-extrabold text-[#0F172A]"
+              className={`font-extrabold text-[#0F172A] ${
+                compact ? "text-[15px]" : "text-[17px]"
+              }`}
               numberOfLines={1}
             >
               {listing.name}
             </Text>
 
             <Text
-              className="mt-1 text-[12px] text-[#64748B]"
+              className="mt-1 text-[11px] text-[#64748B]"
               numberOfLines={1}
             >
               {listing.area}, {listing.city}
@@ -170,29 +277,44 @@ export default function ListingCard({
           </View>
         </View>
 
-        <View className="mt-4 flex-row items-end justify-between">
-          <View>
-            <Text className="text-[19px] font-extrabold text-[#0F172A]">
-              ₹{listing.monthly_price.toLocaleString("en-IN")}
+        <View className="my-4 h-px bg-[#E8EEF5]" />
+
+        <View className="flex-row">
+          <View className="mr-3 flex-1 rounded-[14px] bg-[#F8FAFC] px-3.5 py-3">
+            <Text className="text-[10px] font-semibold text-[#64748B]">
+              Starting from
+            </Text>
+            <Text
+              numberOfLines={1}
+              className={`font-extrabold text-[#0F172A] ${
+                compact ? "text-[17px]" : "text-[19px]"
+              }`}
+            >
+              ₹{startingPrice.toLocaleString("en-IN")}
             </Text>
             <Text className="text-[10px] text-[#64748B]">
               per month
             </Text>
           </View>
 
-          <Text className="text-[12px] font-bold text-[#16A34A]">
-            {listing.available_beds} beds available
-          </Text>
+          <View className="flex-1 items-center justify-center rounded-[14px] bg-[#F0FDF4] px-3 py-3">
+            <Text className="text-[18px] font-extrabold text-[#15803D]">
+              {listing.available_beds}
+            </Text>
+            <Text className="mt-0.5 text-center text-[10px] font-semibold text-[#166534]">
+              beds available
+            </Text>
+          </View>
         </View>
 
-        <View className="mt-3 flex-row flex-wrap">
-          <View className="mr-2 rounded-full bg-[#F8FAFC] px-3 py-1.5">
+        <View className="mt-4 flex-row flex-wrap">
+          <View className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2">
             <Text className="text-[10px] font-bold text-[#475569]">
               {listing.gender}
             </Text>
           </View>
 
-          <View className="mr-2 rounded-full bg-[#F8FAFC] px-3 py-1.5">
+          <View className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2">
             <Text className="text-[10px] font-bold text-[#475569]">
               {listing.ac_type}
             </Text>
@@ -201,7 +323,7 @@ export default function ListingCard({
           {(listing.facilities ?? []).slice(0, 2).map((facility) => (
             <View
               key={facility}
-              className="mr-2 rounded-full bg-[#F8FAFC] px-3 py-1.5"
+              className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2"
             >
               <Text className="text-[10px] font-bold text-[#475569]">
                 {facility}

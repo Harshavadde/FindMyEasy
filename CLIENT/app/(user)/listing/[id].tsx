@@ -460,6 +460,32 @@ export default function UserListingDetails() {
 
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedSharingType, setSelectedSharingType] = useState<string | null>(
+    null
+  );
+  const [sharingDropdownOpen, setSharingDropdownOpen] = useState(false);
+
+  const sharingOptions = listing?.sharing ?? [];
+  const sharingGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { key: string; label: string; options: ListingSharing[] }
+    >();
+    sharingOptions.forEach((item) => {
+      const label = item.sharing_type.trim();
+      const key = label.toLowerCase();
+      const group = groups.get(key);
+      if (group) {
+        group.options.push(item);
+      } else {
+        groups.set(key, { key, label, options: [item] });
+      }
+    });
+    return Array.from(groups.values());
+  }, [sharingOptions]);
+
+  const selectedSharingGroup =
+    sharingGroups.find((group) => group.key === selectedSharingType) ?? null;
 
   const gallery = useMemo(
     () => buildGallery(listing?.images),
@@ -471,6 +497,8 @@ export default function UserListingDetails() {
       const data = await getPublicListing(listingId!);
 
       setListing(data);
+      setSelectedSharingType(null);
+      setSharingDropdownOpen(false);
     } catch (error: any) {
       console.error("Listing details error:", error);
 
@@ -540,6 +568,41 @@ export default function UserListingDetails() {
     await Linking.openURL(`https://wa.me/${phone}`);
   };
 
+  const openNearbyEssentials = async (searchTerm: string) => {
+    const latitude = Number(listing?.latitude);
+    const longitude = Number(listing?.longitude);
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      Alert.alert(
+        "Location unavailable",
+        "This property does not have valid map coordinates."
+      );
+      return;
+    }
+
+    const query = encodeURIComponent(
+      `${searchTerm} near ${latitude},${longitude}`
+    );
+    try {
+      await Linking.openURL(
+        `https://www.google.com/maps/search/?api=1&query=${query}`
+      );
+    } catch (error: unknown) {
+      Alert.alert(
+        "Unable to open map",
+        error instanceof Error
+          ? error.message
+          : "Please try opening the map again."
+      );
+    }
+  };
+
   const handleBack = () => {
   if (router.canGoBack()) {
     router.back();
@@ -569,6 +632,32 @@ export default function UserListingDetails() {
       </View>
     );
   }
+
+  const selectedSharingPrice = selectedSharingGroup
+    ? Math.min(
+        ...selectedSharingGroup.options.map((item) =>
+          Number(item.monthly_price)
+        )
+      )
+    : null;
+  const startingPrice = sharingOptions.length
+    ? Math.min(...sharingOptions.map((item) => Number(item.monthly_price)))
+    : Number(listing.monthly_price);
+  const totalBeds = sharingOptions.reduce(
+    (total, item) => total + Number(item.total_beds || 0),
+    0
+  );
+  const availableBeds = sharingOptions.reduce(
+    (total, item) => total + Number(item.available_beds || 0),
+    0
+  );
+  const filledBeds = sharingOptions.reduce(
+    (total, item) => total + Number(item.filled_beds || 0),
+    0
+  );
+  const occupancy = totalBeds
+    ? Math.round((filledBeds / totalBeds) * 100)
+    : 0;
 
   return (
     <View className="flex-1 bg-[#F5F9FD]">
@@ -601,10 +690,14 @@ export default function UserListingDetails() {
           </View>
 
           <View className="mt-5 rounded-[18px] bg-white p-4">
-            <Text className="text-[12px] text-[#64748B]">Monthly Rent</Text>
+            <Text className="text-[12px] text-[#64748B]">
+              {selectedSharingGroup ? "Monthly Rent" : "Starting from"}
+            </Text>
 
             <Text className="mt-1 text-[25px] font-extrabold text-[#0F172A]">
-              ₹{listing.monthly_price.toLocaleString("en-IN")}
+              ₹{Number(selectedSharingPrice ?? startingPrice).toLocaleString(
+                "en-IN"
+              )}
             </Text>
 
             <Text className="mt-1 text-[11px] text-[#64748B]">
@@ -616,104 +709,172 @@ export default function UserListingDetails() {
           {/* BEDS AND SHARING */}
           <Section title="Beds & Availability">
             {(() => {
-              const sharingOptions: ListingSharing[] = listing.sharing ?? [];
-
-              const totalBeds = sharingOptions.reduce<number>(
-                (sum, item) => sum + Number(item.total_beds || 0),
-                0
-              );
-
-              const availableBeds = sharingOptions.reduce<number>(
-                (sum, item) => sum + Number(item.available_beds || 0),
-                0
-              );
-
-              const filledBeds = sharingOptions.reduce<number>(
-                (sum, item) => sum + Number(item.filled_beds || 0),
-                0
-              );
-
-              const occupancy = totalBeds
-                ? Math.round((filledBeds / totalBeds) * 100)
-                : 0;
-
               return (
                 <>
-                  <View className="flex-row justify-between">
-                    <InfoItem label="Total beds" value={String(totalBeds)} />
-                    <InfoItem label="Available" value={String(availableBeds)} />
-                    <InfoItem label="Filled" value={String(filledBeds)} />
-                  </View>
-
-                  <Text className="mt-4 text-[12px] font-bold text-[#475569]">
-                    Occupancy: {occupancy}% filled
-                  </Text>
-
-                  <View className="mt-2 h-2 overflow-hidden rounded-full bg-[#E2E8F0]">
-                    <View
-                      className="h-2 rounded-full bg-[#2563EB]"
-                      style={{ width: `${occupancy}%` }}
-                    />
-                  </View>
-
-                  <Text className="mb-3 mt-5 text-[14px] font-extrabold text-[#0F172A]">
-                    Sharing options
-                  </Text>
-
                   {sharingOptions.length ? (
-                    sharingOptions.map(
-                      (item: ListingSharing, index: number) => (
-                        <View
-                          key={item.id || `${item.sharing_type}-${index}`}
-                          className="mb-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4"
+                    <>
+                      <View className="flex-row justify-between rounded-[14px] bg-[#F8FAFC] px-3 py-3">
+                        <InfoItem label="Total beds" value={String(totalBeds)} />
+                        <InfoItem
+                          label="Available"
+                          value={String(availableBeds)}
+                        />
+                        <InfoItem label="Filled" value={String(filledBeds)} />
+                      </View>
+
+                      <View className="mt-4">
+                        <View className="mb-2 flex-row items-center justify-between">
+                          <Text className="text-[12px] font-bold text-[#475569]">
+                            Occupancy
+                          </Text>
+                          <Text className="text-[12px] font-extrabold text-[#2563EB]">
+                            {occupancy}% filled
+                          </Text>
+                        </View>
+                        <View className="h-2 overflow-hidden rounded-full bg-[#E2E8F0]">
+                          <View
+                            className="h-2 rounded-full bg-[#2563EB]"
+                            style={{ width: `${occupancy}%` }}
+                          />
+                        </View>
+                      </View>
+
+                      <View className="mb-3 mt-5">
+                        <Text className="text-[14px] font-extrabold text-[#0F172A]">
+                          Find your room
+                        </Text>
+                        <Text className="mt-1 text-[12px] leading-5 text-[#64748B]">
+                          Choose a sharing option to compare floors, beds, and
+                          monthly rent.
+                        </Text>
+                      </View>
+                    </>
+                  ) : null}
+                  {sharingOptions.length ? (
+                    <>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          expanded: sharingDropdownOpen,
+                        }}
+                        onPress={() =>
+                          setSharingDropdownOpen((isOpen) => !isOpen)
+                        }
+                        className={`flex-row items-center justify-between rounded-[14px] border px-4 py-3.5 ${
+                          selectedSharingGroup
+                            ? "border-[#BFDBFE] bg-[#EFF6FF]"
+                            : "border-[#2563EB] bg-white"
+                        }`}
+                      >
+                        <Text
+                          className={`text-[13px] font-bold ${
+                            selectedSharingGroup
+                              ? "text-[#0F172A]"
+                              : "text-[#64748B]"
+                          }`}
                         >
-                          <View className="mb-3 flex-row justify-between">
-                            <Text className="font-extrabold text-[#2563EB]">
-                              {item.sharing_type} Sharing
-                            </Text>
+                          {selectedSharingGroup
+                            ? `${selectedSharingGroup.label} Sharing`
+                            : "Tap to choose sharing"}
+                        </Text>
+                        <MaterialCommunityIcons
+                          name={
+                            sharingDropdownOpen
+                              ? "chevron-up"
+                              : "chevron-down"
+                          }
+                          size={20}
+                          color="#2563EB"
+                        />
+                      </Pressable>
 
-                            <Text className="font-extrabold text-[#0F172A]">
-                              ₹
-                              {Number(item.monthly_price).toLocaleString(
-                                "en-IN"
-                              )}
-                              /month
-                            </Text>
-                          </View>
+                      {sharingDropdownOpen ? (
+                        <View className="mt-1 overflow-hidden rounded-[12px] border border-[#E2E8F0] bg-white">
+                          {sharingGroups.map((group, index) => {
+                            const isSelected = group.key === selectedSharingType;
+                            const groupStartingPrice = Math.min(
+                              ...group.options.map((item) =>
+                                Number(item.monthly_price)
+                              )
+                            );
+                            return (
+                              <Pressable
+                                key={group.key}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: isSelected }}
+                                onPress={() => {
+                                  setSelectedSharingType(group.key);
+                                  setSharingDropdownOpen(false);
+                                }}
+                                className={`flex-row items-center justify-between px-4 py-3 ${
+                                  index < sharingGroups.length - 1
+                                    ? "border-b border-[#F1F5F9]"
+                                    : ""
+                                }`}
+                              >
+                                <Text
+                                  className={`text-[13px] font-semibold ${
+                                    isSelected
+                                      ? "text-[#2563EB]"
+                                      : "text-[#334155]"
+                                  }`}
+                                >
+                                  {group.label} Sharing
+                                </Text>
+                                <Text className="text-[12px] font-bold text-[#0F172A]">
+                                  From ₹{groupStartingPrice.toLocaleString("en-IN")}
+                                  /month
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : null}
 
-                          <View className="mb-3 flex-row flex-wrap">
-                            <View className="mb-2 mr-2 rounded-full bg-blue-50 px-3 py-2">
-                              <Text className="text-[11px] font-bold text-blue-700">
-                                {item.ac_type || "Non-AC"}
-                              </Text>
-                            </View>
-
-                            {item.floor?.trim() ? (
-                              <View className="mb-2 rounded-full bg-blue-50 px-3 py-2">
-                                <Text className="text-[11px] font-bold text-blue-700">
-                                  {item.floor}
+                      {selectedSharingGroup ? (
+                        <View className="mt-3 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC]">
+                          {selectedSharingGroup.options.map((item, index) => (
+                            <View
+                              key={item.id || `${item.sharing_type}-${index}`}
+                              className={`flex-row items-center justify-between px-4 py-3.5 ${
+                                index < selectedSharingGroup.options.length - 1
+                                  ? "border-b border-[#E2E8F0]"
+                                  : ""
+                              }`}
+                            >
+                              <View className="mr-3 flex-1">
+                                <Text className="text-[13px] font-extrabold text-[#0F172A]">
+                                  {item.floor?.trim()
+                                    ? formatFloor(item.floor)
+                                    : item.ac_type || "Sharing option"}
+                                </Text>
+                                {item.floor?.trim() && item.ac_type ? (
+                                  <Text className="mt-0.5 text-[11px] font-semibold text-[#64748B]">
+                                    {item.ac_type}
+                                  </Text>
+                                ) : null}
+                                <Text className="mt-1 text-[11px] text-[#64748B]">
+                                  {item.available_beds} available of{" "}
+                                  {item.total_beds} beds
+                                  {Number(item.filled_beds) > 0
+                                    ? ` · ${item.filled_beds} filled`
+                                    : ""}
                                 </Text>
                               </View>
-                            ) : null}
-                          </View>
-
-                          <View className="flex-row justify-between">
-                            <InfoItem
-                              label="Total beds"
-                              value={String(item.total_beds)}
-                            />
-                            <InfoItem
-                              label="Available"
-                              value={String(item.available_beds)}
-                            />
-                            <InfoItem
-                              label="Filled"
-                              value={String(item.filled_beds)}
-                            />
-                          </View>
+                              <Text className="text-[13px] font-extrabold text-[#2563EB]">
+                                ₹
+                                {Number(item.monthly_price).toLocaleString(
+                                  "en-IN"
+                                )}
+                                <Text className="text-[10px] font-semibold text-[#64748B]">
+                                  /month
+                                </Text>
+                              </Text>
+                            </View>
+                          ))}
                         </View>
-                      )
-                    )
+                      ) : null}
+                    </>
                   ) : (
                     <Text className="text-[13px] text-[#64748B]">
                       Sharing details are not available.
@@ -845,6 +1006,80 @@ export default function UserListingDetails() {
             )}
           </Section>
 
+          <Section title="Find essentials nearby">
+            <Text className="mb-4 text-[12px] leading-5 text-[#64748B]">
+              Explore useful places around this property
+            </Text>
+            <View className="flex-row flex-wrap justify-between">
+              {([
+                {
+                  label: "Metro",
+                  subtitle: "Stations",
+                  icon: "train",
+                  color: "#2563EB",
+                  background: "#EFF6FF",
+                  query: "metro stations",
+                },
+                {
+                  label: "IT Parks",
+                  subtitle: "Workplaces",
+                  icon: "office-building",
+                  color: "#7C3AED",
+                  background: "#F5F3FF",
+                  query: "IT parks",
+                },
+                {
+                  label: "Coaching",
+                  subtitle: "Education hubs",
+                  icon: "school-outline",
+                  color: "#D97706",
+                  background: "#FFFBEB",
+                  query: "coaching centers",
+                },
+                {
+                  label: "Bus Stops",
+                  subtitle: "Nearby transit",
+                  icon: "bus",
+                  color: "#059669",
+                  background: "#ECFDF5",
+                  query: "bus stops",
+                },
+              ] as const).map((item) => (
+                <Pressable
+                  key={item.query}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Find nearby ${item.label} on map`}
+                  onPress={() => void openNearbyEssentials(item.query)}
+                  className="mb-3 w-[48%] rounded-[16px] border border-[#E2E8F0] bg-white p-3"
+                >
+                  <View
+                    className="mb-3 h-10 w-10 items-center justify-center rounded-[13px]"
+                    style={{ backgroundColor: item.background }}
+                  >
+                    <MaterialCommunityIcons
+                      name={item.icon}
+                      size={22}
+                      color={item.color}
+                    />
+                  </View>
+                  <Text className="text-[13px] font-extrabold text-[#0F172A]">
+                    {item.label}
+                  </Text>
+                  <View className="mt-1 flex-row items-center justify-between">
+                    <Text className="text-[10px] text-[#64748B]">
+                      {item.subtitle}
+                    </Text>
+                    <MaterialCommunityIcons
+                      name="arrow-top-right"
+                      size={15}
+                      color="#94A3B8"
+                    />
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </Section>
+
           <Section title="Location">
             <Text className="text-[13px] leading-6 text-[#475569]">
               {listing.address}
@@ -903,6 +1138,26 @@ function InfoItem({ label, value }: { label: string; value: string }) {
       </Text>
     </View>
   );
+}
+
+function formatFloor(floor: string): string {
+  const value = floor.trim();
+  const match = value.match(/^(-?\d+)(?:st|nd|rd|th)?(?:\s*floor)?$/i);
+  if (!match) return value;
+
+  const floorNumber = Number(match[1]);
+  const lastTwoDigits = Math.abs(floorNumber) % 100;
+  const suffix =
+    lastTwoDigits >= 11 && lastTwoDigits <= 13
+      ? "th"
+      : Math.abs(floorNumber) % 10 === 1
+        ? "st"
+        : Math.abs(floorNumber) % 10 === 2
+          ? "nd"
+          : Math.abs(floorNumber) % 10 === 3
+            ? "rd"
+            : "th";
+  return `${floorNumber}${suffix} floor`;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {

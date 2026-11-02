@@ -11,6 +11,7 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { router } from "expo-router";
@@ -206,8 +207,42 @@ export default function UserSearch() {
               Find PGs and hostels by name, area, city, or address.
             </Text>
 
+            <Pressable
+              onPress={() => {
+                Keyboard.dismiss();
+                router.push({
+                  pathname: "/(user)/PG",
+                  params: { filterMode: "new" },
+                });
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Find PG using city, area, room, and facility preferences"
+              className="mt-4 flex-row items-center justify-between rounded-[18px] bg-[#2563EB] p-4"
+            >
+              <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-[#FFFFFF26]">
+                <MaterialCommunityIcons
+                  name="tune-variant"
+                  size={21}
+                  color="#FFFFFF"
+                />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[15px] font-extrabold text-white">
+                  Find PG
+                </Text>
+                <Text className="mt-1 text-[11px] text-[#DBEAFE]">
+                  Choose city, area, sharing and AC preferences
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="arrow-right"
+                size={20}
+                color="#FFFFFF"
+              />
+            </Pressable>
+
             <View
-              className={`mt-5 flex-row items-center rounded-[18px] bg-white px-4 ${
+              className={`mt-4 flex-row items-center rounded-[18px] bg-white px-4 ${
                 searchFocused
                   ? "border-2 border-[#2563EB]"
                   : "border border-[#E2E8F0]"

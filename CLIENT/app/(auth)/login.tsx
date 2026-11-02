@@ -12,13 +12,14 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   getIndianPhoneInputValue,
   loginWithPhonePassword,
   normalizeIndianPhoneNumber,
+  getUserRole,
   type UserRole,
 } from "../../services/auth";
 
@@ -33,6 +34,9 @@ const COLORS = {
 
 export default function Login() {
   const { completeLogin } = useAuth();
+  const params = useLocalSearchParams<{ role?: string }>();
+  const selectedRole: UserRole =
+    params.role === "owner" ? "owner" : "user";
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -61,8 +65,7 @@ export default function Login() {
         phone_number: phoneNumber,
         password,
       });
-      const role: UserRole =
-        result.user.user_role === "OWNER" ? "owner" : "user";
+      const role = getUserRole(result.user);
       await completeLogin(result.user, role);
     } catch (error) {
       Alert.alert(
@@ -165,7 +168,12 @@ export default function Login() {
               <Text style={styles.footerText}>New to FindEasy? </Text>
               <Pressable
                 disabled={loading}
-                onPress={() => router.push("/(auth)/signup")}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(auth)/signup",
+                    params: { role: selectedRole },
+                  })
+                }
               >
                 <Text style={styles.link}>Create account</Text>
               </Pressable>
