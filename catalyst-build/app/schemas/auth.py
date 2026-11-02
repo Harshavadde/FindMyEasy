@@ -4,6 +4,17 @@ import re
 from pydantic import field_validator, BaseModel, EmailStr, Field, ConfigDict
 
 
+def normalize_phone_number(value: str) -> str:
+    normalized = value.strip()
+    if re.fullmatch(r"[6-9]\d{9}", normalized):
+        normalized = f"+91{normalized}"
+    if not re.fullmatch(r"\+91[6-9]\d{9}", normalized):
+        raise ValueError(
+            "Enter a valid Indian mobile number in +91XXXXXXXXXX format."
+        )
+    return normalized
+
+
 class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     email: EmailStr

@@ -114,7 +114,7 @@ def submit_owner_application(
                     "awaiting review."
                 ),
             ) from error
-        logger.error(
+        logger.exception(
             "Could not save an Owner partnership application (error_type=%s).",
             type(error).__name__,
         )
@@ -124,7 +124,7 @@ def submit_owner_application(
         ) from error
     except SQLAlchemyError as error:
         db.rollback()
-        logger.error(
+        logger.exception(
             "Could not save an Owner partnership application (error_type=%s).",
             type(error).__name__,
         )

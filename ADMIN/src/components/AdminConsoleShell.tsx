@@ -13,11 +13,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
-  ADMIN_TOKEN_KEY,
   ApiError,
   getCurrentAdmin,
   type AdminUser,
 } from "@/services/api";
+import {
+  clearAdminToken,
+  getAdminToken,
+} from "@/services/tokenStorage";
 
 type AdminSection = "owner-applications" | "listings";
 
@@ -53,21 +56,20 @@ export function AdminConsoleShell({
   const [sessionError, setSessionError] = useState("");
 
   const signOut = useCallback(() => {
-    window.sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+    clearAdminToken();
     router.replace("/login?role=admin");
   }, [router]);
 
   const verifySession = useCallback(async () => {
     setIsCheckingSession(true);
     setSessionError("");
-    const savedToken = window.sessionStorage.getItem(ADMIN_TOKEN_KEY);
-    if (!savedToken) {
-      router.replace("/login?role=admin");
-      setIsCheckingSession(false);
-      return;
-    }
-
     try {
+      const savedToken = getAdminToken();
+      if (!savedToken) {
+        router.replace("/login?role=admin");
+        return;
+      }
+
       const currentUser = await getCurrentAdmin(savedToken);
       if (currentUser.user_role !== "ADMIN") {
         signOut();

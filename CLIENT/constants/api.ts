@@ -47,6 +47,50 @@ export const API_BASE_URL = resolveBaseUrl();
 
 export type ApiErrorKind = "auth" | "network" | "timeout" | "http";
 
+type ApiErrorDiagnostics = {
+  requestUrl?: string;
+  method?: string;
+  responseBody?: unknown;
+};
+
+function sanitizeDiagnosticValue(value: unknown, key = ""): unknown {
+  if (/password|token|secret|phone|email|name|address|input|context/i.test(key)) {
+    return "[redacted]";
+  }
+  if (typeof value === "string") {
+    return value
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted email]")
+      .replace(/(?:\+?91[\s-]?)?[6-9]\d{9}\b/g, "[redacted phone]")
+      .slice(0, 500);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeDiagnosticValue(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        sanitizeDiagnosticValue(entryValue, entryKey),
+      ])
+    );
+  }
+  return value;
+}
+
+function diagnosticResponseBody(data: unknown, raw: string): unknown {
+  if (data !== null && typeof data === "object") {
+    return sanitizeDiagnosticValue(data);
+  }
+  return {
+    type: "non-json",
+    length: raw.length,
+    preview: raw
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted email]")
+      .replace(/(?:\+?91[\s-]?)?[6-9]\d{9}\b/g, "[redacted phone]")
+      .slice(0, 500),
+  };
+}
+
 type OwnerFetchImplementation = (
   url: string,
   options?: RequestInit
@@ -134,12 +178,23 @@ function createSessionAbortError(): Error {
 export class ApiError extends Error {
   kind: ApiErrorKind;
   status?: number;
+  requestUrl?: string;
+  method?: string;
+  responseBody?: unknown;
 
-  constructor(kind: ApiErrorKind, message: string, status?: number) {
+  constructor(
+    kind: ApiErrorKind,
+    message: string,
+    status?: number,
+    diagnostics: ApiErrorDiagnostics = {}
+  ) {
     super(message);
     this.name = "ApiError";
     this.kind = kind;
     this.status = status;
+    this.requestUrl = diagnostics.requestUrl;
+    this.method = diagnostics.method;
+    this.responseBody = diagnostics.responseBody;
   }
 }
 
@@ -214,13 +269,17 @@ export async function postJson<T = any>(
       throw new ApiError(
         "timeout",
         `The server at ${API_BASE_URL} did not respond in ${timeoutMs / 1000
-        } seconds.`
+        } seconds.`,
+        undefined,
+        { requestUrl: url, method: "POST" }
       );
     }
 
     throw new ApiError(
       "network",
-      `Cannot reach the server at ${API_BASE_URL}.`
+      `Cannot reach the server at ${API_BASE_URL}.`,
+      undefined,
+      { requestUrl: url, method: "POST" }
     );
   } finally {
     clearTimeout(timer);
@@ -239,7 +298,12 @@ export async function postJson<T = any>(
     throw new ApiError(
       "http",
       extractMessage(data, raw, response.status),
-      response.status
+      response.status,
+      {
+        requestUrl: url,
+        method: "POST",
+        responseBody: diagnosticResponseBody(data, raw),
+      }
     );
   }
 

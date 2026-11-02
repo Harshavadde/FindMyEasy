@@ -5,7 +5,6 @@ import type {
 
 const API_PREFIX = "/api/backend";
 const REQUEST_TIMEOUT_MS = 10_000;
-export const ADMIN_TOKEN_KEY = "findeasy_admin_access_token";
 export type { AdminListingContract, ListingImageContract };
 
 export type AdminUser = {

@@ -4,10 +4,10 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
-  ADMIN_TOKEN_KEY,
   getAdminSetupStatus,
   login,
 } from "@/services/api";
+import { saveAdminToken } from "@/services/tokenStorage";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -40,7 +40,7 @@ export default function AdminLoginPage() {
 
     try {
       const result = await login(phone, password);
-      window.sessionStorage.setItem(ADMIN_TOKEN_KEY, result.access_token);
+      saveAdminToken(result.access_token);
       router.replace("/dashboard");
     } catch (loginError) {
       setError(

@@ -16,6 +16,9 @@ from app.api.routes.admin_owner_applications import (
     router as admin_owner_applications_router,
 )
 from app.api.routes.auth import router as auth_router
+from app.api.routes.owner_applications import (
+    router as owner_applications_router,
+)
 from app.api.routes.owner_invitations import router as owner_invitations_router
 from app.core.config import settings
 from app.core.security import hash_password
@@ -70,6 +73,7 @@ class AdminOwnerApplicationTests(unittest.TestCase):
         self.app.include_router(auth_router)
         self.app.include_router(admin_router)
         self.app.include_router(admin_owner_applications_router)
+        self.app.include_router(owner_applications_router)
         self.app.include_router(owner_invitations_router)
 
         def override_db():
@@ -242,6 +246,38 @@ class AdminOwnerApplicationTests(unittest.TestCase):
         self.assertEqual(result["items"][0]["applicant_name"], "Ravi Shah")
         self.assertCountEqual(result["cities"], ["Bengaluru", "Hyderabad"])
         self.assertNotIn("status_access_hash", result["items"][0])
+
+    def test_submitted_application_is_visible_to_admin(self) -> None:
+        submission = self.client.post(
+            "/api/v1/owner-applications",
+            json={
+                "applicant_name": "Asha Rao",
+                "applicant_phone": "9876543214",
+                "relationship_type": "PROPERTY_OWNER",
+                "pg_name": "Admin Visibility Test PG",
+                "city": "Hyderabad",
+                "area": "Madhapur",
+                "address": "Plot 14, Main Road, Madhapur, Hyderabad",
+                "latitude": 17.4483,
+                "longitude": 78.3915,
+                "declaration_accepted": True,
+            },
+        )
+        self.assertEqual(submission.status_code, 201, submission.text)
+
+        response = self.client.get(
+            "/api/v1/admin/owner-applications",
+            params={"search": submission.json()["application_reference"]},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(
+            result["items"][0]["application_reference"],
+            submission.json()["application_reference"],
+        )
+        self.assertEqual(result["items"][0]["status"], "SUBMITTED")
 
     def test_detail_returns_review_fields_without_private_access_hash(self) -> None:
         application = self._create_application(

@@ -50,9 +50,10 @@ export function getOwnerApplicationSubmitError(error: unknown): string {
 
   if (__DEV__) {
     console.warn("Owner application request failed", {
+      method: error.method,
       requestUrl: error.requestUrl,
       status: error.status,
-      backendDetail: error.message,
+      backendResponseBody: error.responseBody,
     });
   }
 
@@ -72,7 +73,7 @@ export function getOwnerApplicationSubmitError(error: unknown): string {
     return error.message;
   }
   if (error.status && error.status >= 500) {
-    return "The server could not save your application. The owner_applications database migration must be applied before submissions can be stored.";
+    return error.message || "The server could not save your application. Please try again.";
   }
   if (error.status) {
     return `Submission failed (HTTP ${error.status}). ${error.message}`;

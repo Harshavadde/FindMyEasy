@@ -25,13 +25,14 @@ function RoleCard({ title, subtitle, cta, accent, accentSoft, icon, onPress }: R
       onHoverIn={() => setActive(true)}
       onHoverOut={() => setActive(false)}
       style={{
-        minHeight: 190,
+        flex: 1,
+        maxHeight: 250,
         backgroundColor: "#FFFFFF",
-        borderRadius: 28,
-        padding: 20,
+        borderRadius: 30,
+        padding: 22,
         justifyContent: "space-between",
-        borderWidth: 1,
-        borderColor: active ? accent : "#DBEAFE",
+        borderWidth: 2,
+        borderColor: active ? accent : "#FFFFFF",
         transform: [{ scale: active ? 0.98 : 1 }],
         shadowColor: accent,
         shadowOffset: { width: 0, height: active ? 12 : 6 },
@@ -43,19 +44,19 @@ function RoleCard({ title, subtitle, cta, accent, accentSoft, icon, onPress }: R
       {/* Top row: icon + arrow */}
       <View className="flex-row items-start justify-between">
         <View
-          className="h-[58px] w-[58px] items-center justify-center rounded-[19px]"
+          className="h-[76px] w-[76px] items-center justify-center rounded-[24px]"
           style={{ backgroundColor: accentSoft }}
         >
-          <MaterialCommunityIcons name={icon} size={32} color={accent} />
+          <MaterialCommunityIcons name={icon} size={42} color={accent} />
         </View>
 
         <View
-          className="h-10 w-10 items-center justify-center rounded-full"
+          className="h-12 w-12 items-center justify-center rounded-full"
           style={{ backgroundColor: active ? accent : accentSoft }}
         >
           <MaterialCommunityIcons
             name="arrow-right"
-            size={21}
+            size={24}
             color={active ? "#FFFFFF" : accent}
           />
         </View>
@@ -63,22 +64,16 @@ function RoleCard({ title, subtitle, cta, accent, accentSoft, icon, onPress }: R
 
       {/* Bottom: text */}
       <View>
-        <Text className="text-[21px] font-extrabold text-[#0F172A]">{title}</Text>
-        <Text className="mt-1 text-[13px] leading-5 text-[#64748B]">{subtitle}</Text>
+        <Text className="text-[26px] font-extrabold text-[#0F172A]">{title}</Text>
+        <Text className="mt-1 text-[15px] leading-5 text-[#64748B]">{subtitle}</Text>
 
         <View
-          className="mt-3 flex-row items-center self-start rounded-full px-3 py-1.5"
+          className="mt-3 self-start rounded-full px-3 py-1.5"
           style={{ backgroundColor: accentSoft }}
         >
           <Text className="text-[12px] font-bold" style={{ color: accent }}>
             {cta}
           </Text>
-          <MaterialCommunityIcons
-            name="arrow-right"
-            size={14}
-            color={accent}
-            style={{ marginLeft: 5 }}
-          />
         </View>
       </View>
     </Pressable>
@@ -87,63 +82,70 @@ function RoleCard({ title, subtitle, cta, accent, accentSoft, icon, onPress }: R
 
 export default function Index() {
   return (
-    <SafeAreaView className="flex-1 bg-[#EFF6FF]">
+    <SafeAreaView className="flex-1 bg-[#DCEBFF]">
       <View className="flex-1 overflow-hidden">
         {/* Background decorations */}
-        <View className="absolute -right-24 -top-20 h-64 w-64 rounded-full bg-[#DBEAFE]" />
-        <View className="absolute -left-28 top-1/3 h-72 w-72 rounded-full bg-[#CCFBF1]" />
+        <View className="absolute -right-24 -top-20 h-64 w-64 rounded-full bg-[#BFDBFE]" />
+        <View className="absolute -left-28 top-1/3 h-72 w-72 rounded-full bg-[#C7F0E8]" />
         <View className="absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-[#E0E7FF]" />
 
         <View className="flex-1 px-5">
           {/* Title */}
-          <View className="items-center pt-7">
-            <View className="mb-3 flex-row items-center rounded-full border border-[#DBEAFE] bg-white px-3 py-1.5">
-              <View className="mr-2 h-2 w-2 rounded-full bg-[#2563EB]" />
-              <Text className="text-[11px] font-bold text-[#1D4ED8]">
-                PGs, hostels & co-living
-              </Text>
-            </View>
-            <Text className="text-[36px] font-extrabold tracking-tight text-[#0F172A]">
-              Find<Text className="text-[#2563EB]">Easy</Text>
+          <View className="items-center pt-8">
+            <Text className="text-[42px] font-extrabold tracking-tight text-[#2563EB]">
+              FindEasy
             </Text>
-            <Text className="mt-1 text-[14px] font-medium text-[#64748B]">
+            <Text className="mt-1 text-[15px] font-medium text-[#475569]">
               Find what you need, near you.
             </Text>
-            <Text className="mt-5 text-center text-[16px] font-bold text-[#1E293B]">
-              How would you like to use FindEasy?
+            <Text className="mt-5 text-[17px] font-semibold text-[#1E293B]">
+              Choose how you want to use FindEasy
             </Text>
           </View>
 
-          {/* Role selection */}
-          <View className="flex-1 justify-center py-6" style={{ gap: 16 }}>
+          {/* Two big cards fill the remaining space */}
+          <View className="flex-1 justify-center py-6" style={{ gap: 20 }}>
             <RoleCard
-              title="I'm a Tenant"
-              subtitle="Browse PGs, hostels and co-living spaces."
-              cta="Explore stays"
+              title="I'M USER"
+              subtitle="Find PGs and hostels near you"
+              cta="Start searching"
               accent="#2563EB"
               accentSoft="#E8F1FF"
-              icon="home-search"
+              icon="account-search"
               onPress={() => router.push({ pathname: "/login", params: { role: "user" } })}
             />
 
-            <RoleCard
-              title="I'm an Owner"
-              subtitle="List and manage your PG or hostel."
-              cta="List your property"
-              accent="#0D9488"
-              accentSoft="#DDF7F2"
-              icon="office-building"
-              onPress={() =>
-                router.push({
-                  pathname: "/(auth)/login",
-                  params: { role: "owner" },
-                })
-              }
+                      <RoleCard
+            title="I'M OWNER"
+            subtitle="Add and manage your PG or hostel"
+            cta="List your property"
+            accent="#0D9488"
+            accentSoft="#DDF7F2"
+            icon="home-city"
+            onPress={() =>
+              router.push({
+                pathname: "/login",
+                params: { role: "owner" },
+              })
+            }
             />
           </View>
 
+          <Pressable
+            accessibilityRole="button"
+            className="mb-5 items-center rounded-2xl border border-white/80 bg-white/80 px-5 py-4"
+            onPress={() => router.push("/partner-application")}
+          >
+            <Text className="text-[15px] font-extrabold text-[#2563EB]">
+              Become a FindEasy Partner
+            </Text>
+            <Text className="mt-1 text-[12px] text-[#64748B]">
+              Apply to list your PG or property
+            </Text>
+          </Pressable>
+
           {/* Caption */}
-          <View className="items-center pb-4">
+          <View className="items-center pb-5">
             <Text className="text-[12px] font-medium text-[#64748B]">
               Your stay. Your choice. Made easy.
             </Text>

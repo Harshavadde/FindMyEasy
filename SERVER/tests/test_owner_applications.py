@@ -1,8 +1,10 @@
 import unittest
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -201,6 +203,31 @@ class OwnerApplicationTests(unittest.TestCase):
         )
         self.assertEqual(missing_declaration.status_code, 422)
 
+        with self.session_factory() as db:
+            self.assertEqual(db.query(OwnerApplication).count(), 0)
+
+    def test_database_write_failure_logs_traceback_without_claiming_migration_missing(
+        self,
+    ) -> None:
+        with patch(
+            "app.api.routes.owner_applications.Session.commit",
+            side_effect=SQLAlchemyError("synthetic database failure"),
+        ):
+            with self.assertLogs(
+                "app.api.routes.owner_applications",
+                level="ERROR",
+            ) as captured:
+                response = self.client.post(
+                    "/api/v1/owner-applications",
+                    json=self._payload(),
+                )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json()["detail"],
+            "Unable to submit your application. Please try again.",
+        )
+        self.assertIn("Traceback (most recent call last)", captured.output[0])
         with self.session_factory() as db:
             self.assertEqual(db.query(OwnerApplication).count(), 0)
 
