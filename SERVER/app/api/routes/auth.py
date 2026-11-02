@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from app.core.admin_setup import admin_setup_is_complete
 from app.core.config import settings
 from app.core.security import hash_password, verify_password
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.auth import (
     AuthResponse,
+    AdminSetupStatus,
     LoginRequest,
     ProfileUpdateRequest,
     RegisterRequest,
@@ -42,7 +44,7 @@ def create_access_token(user: User) -> str:
 
     return jwt.encode(
         payload,
-        settings.AUTH_SECRET_KEY,
+        settings.JWT_SECRET_KEY,
         algorithm=ALGORITHM,
     )
 
@@ -60,7 +62,7 @@ def get_current_user(
     try:
         payload = jwt.decode(
             token,
-            settings.AUTH_SECRET_KEY,
+            settings.JWT_SECRET_KEY,
             algorithms=[ALGORITHM],
         )
         user_id = payload.get("sub")
@@ -79,6 +81,17 @@ def get_current_user(
     return user
 
 
+def get_current_owner(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.user_role != "OWNER":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner access is required.",
+        )
+    return current_user
+
+
 @router.post(
     "/register",
     response_model=AuthResponse,
@@ -88,11 +101,14 @@ def register(
     data: RegisterRequest,
     db: Session = Depends(get_db),
 ):
-    email = str(data.email).strip().lower()
+    email = str(data.email).strip().lower() if data.email else None
+    identifiers = []
+    if email:
+        identifiers.append(User.email == email)
+    if data.phone_number:
+        identifiers.append(User.phone_number == data.phone_number)
 
-    existing_user = db.query(User).filter(
-        User.email == email
-    ).first()
+    existing_user = db.query(User).filter(*identifiers).first()
 
     if existing_user:
         raise HTTPException(
@@ -102,8 +118,12 @@ def register(
 
     user = User(
         email=email,
+        phone_number=data.phone_number,
+        phone=data.phone_number.removeprefix("+91") if data.phone_number else None,
         password_hash=hash_password(data.password),
         full_name=data.full_name,
+        user_role="SEEKER",
+        is_phone_verified=False,
     )
 
     db.add(user)
@@ -132,11 +152,15 @@ def login(
     data: LoginRequest,
     db: Session = Depends(get_db),
 ):
-    email = str(data.email).strip().lower()
-
-    user = db.query(User).filter(
-        User.email == email
-    ).first()
+    if data.email is not None:
+        email = str(data.email).strip().lower()
+        user = db.query(User).filter(User.email == email).first()
+    else:
+        user = (
+            db.query(User)
+            .filter(User.phone_number == data.phone_number)
+            .first()
+        )
 
     if not user or not verify_password(
         data.password,
@@ -157,6 +181,16 @@ def login(
         access_token=create_access_token(user),
         user=UserResponse.model_validate(user),
     )
+
+
+@router.get(
+    "/admin-setup/status",
+    response_model=AdminSetupStatus,
+)
+def get_admin_setup_status(
+    db: Session = Depends(get_db),
+) -> AdminSetupStatus:
+    return AdminSetupStatus(available=not admin_setup_is_complete(db))
 
 
 @router.get(

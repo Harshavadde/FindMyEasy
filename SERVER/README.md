@@ -1,18 +1,19 @@
 # FindEasy API
 
-## Phone/password authentication
+## Authentication
 
-The active login and signup flow uses an Indian phone number and a password.
-Registration normalizes numbers to `+91XXXXXXXXXX`, stores a salted scrypt
-password hash (minimum 8 characters), and creates the account with
-`is_phone_verified=false`. A
-password is required; entering a phone number alone never authenticates an
-account. Existing phone-only accounts without passwords remain unavailable
-until a secure recovery path is restored.
+Login accepts either an email address or an Indian phone number with a
+password. Phone numbers are normalized to `+91XXXXXXXXXX`. Public
+email/password or phone/password registration creates a SEEKER account;
+OWNER accounts are created through the approved owner-invitation workflow,
+and ADMIN access is assigned only by trusted server-side provisioning.
+Passwords remain required; phone-only accounts without a password cannot
+authenticate until a secure recovery path is restored.
 
 Set `JWT_SECRET_KEY` to at least 32 random bytes in every environment. Keep
 database credentials and signing secrets in server-side environment settings;
-never put them in the Expo client.
+never put them in the Expo client. `AUTH_SECRET_KEY` remains a supported
+environment-variable alias for existing deployments.
 
 ## OTP provider
 

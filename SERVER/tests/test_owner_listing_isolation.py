@@ -24,6 +24,7 @@ from app.api.routes.members import list_members
 from app.api.routes.public_listings import get_public_listings
 from app.api.routes.members import router as owner_members_router
 from app.api.routes.public_listings import router as public_listings_router
+from app.core.security import hash_password
 from app.db.database import Base, get_db
 from app.models.favorite import Favorite
 from app.models.hostel_member import HostelMember
@@ -59,10 +60,10 @@ class OwnerListingIsolationTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.db = Session(self.engine)
-        self.owner_a, self.token_a = self._register_and_login(
+        self.owner_a, self.token_a = self._create_owner_and_login(
             "owner-a@example.com"
         )
-        self.owner_b, self.token_b = self._register_and_login(
+        self.owner_b, self.token_b = self._create_owner_and_login(
             "owner-b@example.com"
         )
 
@@ -147,6 +148,27 @@ class OwnerListingIsolationTests(unittest.TestCase):
             "/api/v1/owner/listings",
         )
         self.assertEqual(unauthenticated_status, 401)
+
+        seeker = User(
+            full_name="Test Seeker",
+            email="seeker@example.com",
+            password_hash=hash_password("a-strong-password"),
+            user_role="SEEKER",
+            is_active=True,
+        )
+        self.db.add(seeker)
+        self.db.commit()
+        seeker_login = login(
+            LoginRequest(email="seeker@example.com", password="a-strong-password"),
+            self.db,
+        )
+        seeker_status, _ = self._asgi_request(
+            app,
+            "GET",
+            "/api/v1/owner/listings",
+            headers={"Authorization": f"Bearer {seeker_login.access_token}"},
+        )
+        self.assertEqual(seeker_status, 403)
 
         headers_a = {"Authorization": f"Bearer {self.token_a}"}
         headers_b = {"Authorization": f"Bearer {self.token_b}"}
@@ -343,6 +365,24 @@ class OwnerListingIsolationTests(unittest.TestCase):
 
         self.assertEqual(registered.user.id, current_user.id)
         return current_user, logged_in.access_token
+
+    def _create_owner_and_login(self, email: str) -> tuple[User, str]:
+        owner = User(
+            full_name=email.split("@")[0],
+            email=email,
+            password_hash=hash_password("a-strong-password"),
+            user_role="OWNER",
+            is_active=True,
+        )
+        self.db.add(owner)
+        self.db.commit()
+        login_result = login(
+            LoginRequest(email=email, password="a-strong-password"),
+            self.db,
+        )
+        current_user = get_current_user(login_result.access_token, self.db)
+        self.assertEqual(owner.id, current_user.id)
+        return current_user, login_result.access_token
 
     @staticmethod
     def _listing_data(name: str) -> ListingCreate:

@@ -360,6 +360,12 @@ class PhonePasswordAuthTests(unittest.TestCase):
         registered = main_app.openapi()["paths"]
         self.assertIn("post", registered["/api/v1/auth/register"])
         self.assertIn("post", registered["/api/v1/auth/login"])
+        self.assertIn("get", registered["/api/v1/auth/admin-setup/status"])
+        self.assertIn("get", registered["/api/v1/admin/listings"])
+        self.assertIn("get", registered["/api/v1/admin/owner-applications"])
+        self.assertIn("post", registered["/api/v1/owner-applications"])
+        self.assertIn("post", registered["/api/v1/owner-invitations/validate"])
+        self.assertIn("post", registered["/api/v1/owner-invitations/register"])
 
 
 if __name__ == "__main__":

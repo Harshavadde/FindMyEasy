@@ -10,6 +10,14 @@ from app.core.config import settings
 from app.db.database import engine
 from app.api.routes.images import router as images_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.admin import router as admin_router
+from app.api.routes.admin_owner_applications import (
+    router as admin_owner_applications_router,
+)
+from app.api.routes.owner_applications import (
+    router as owner_applications_router,
+)
+from app.api.routes.owner_invitations import router as owner_invitations_router
 from app.api.routes.public_listings import router as public_listings_router
 from app.models.hostel_member import HostelMember
 from app.models.user import User
@@ -76,6 +84,10 @@ app.include_router(
 )
 
 app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(admin_owner_applications_router)
+app.include_router(owner_applications_router)
+app.include_router(owner_invitations_router)
 app.include_router(favorites_router)
 
 app.include_router(public_listings_router)

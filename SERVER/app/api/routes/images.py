@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user
+from app.api.routes.auth import get_current_owner
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.image import ImageResponse, ImageType
@@ -23,7 +23,7 @@ async def upload_listing_image_raw(
     image_type: ImageType,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     content_type = (
         request.headers.get(

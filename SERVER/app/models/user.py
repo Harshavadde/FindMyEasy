@@ -18,7 +18,7 @@ class User(Base):
 
     email = Column(
         String(255),
-        nullable=False,
+        nullable=True,
         unique=True,
         index=True,
     )
@@ -36,6 +36,27 @@ class User(Base):
     phone = Column(
         String(10),
         nullable=True,
+    )
+
+    phone_number = Column(
+        String(15),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+
+    is_phone_verified = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    user_role = Column(
+        String(10),
+        nullable=False,
+        default="SEEKER",
+        server_default="SEEKER",
     )
 
     is_active = Column(

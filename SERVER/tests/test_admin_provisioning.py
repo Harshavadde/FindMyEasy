@@ -40,9 +40,7 @@ class AdminProvisioningTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.previous_secret = settings.JWT_SECRET_KEY
-        self.previous_setup_token = settings.ADMIN_SETUP_TOKEN
         settings.JWT_SECRET_KEY = "test-jwt-secret-key-at-least-32-bytes"
-        settings.ADMIN_SETUP_TOKEN = "test-only-admin-setup-token-" + ("x" * 24)
         with self.session_factory() as db:
             db.query(User).delete()
             db.query(AdminSetupState).delete()
@@ -65,7 +63,6 @@ class AdminProvisioningTests(unittest.TestCase):
             db.query(AdminSetupState).delete()
             db.commit()
         settings.JWT_SECRET_KEY = self.previous_secret
-        settings.ADMIN_SETUP_TOKEN = self.previous_setup_token
 
     def _create_user(
         self,
@@ -215,6 +212,7 @@ class AdminProvisioningTests(unittest.TestCase):
                 },
             )
             self.assertEqual(login.status_code, 200, login.text)
+            self.assertEqual(login.json()["user"]["user_role"], role)
             forbidden = self.client.get(
                 "/api/v1/admin/listings",
                 headers={
@@ -224,6 +222,63 @@ class AdminProvisioningTests(unittest.TestCase):
             self.assertEqual(forbidden.status_code, 403)
 
         self.assertIsNotNone(admin.id)
+
+    def test_admin_setup_status_reads_existing_state_without_changing_accounts(self) -> None:
+        admin = self._create_user("+919876543210", "ADMIN")
+        with self.session_factory() as db:
+            db.add(
+                AdminSetupState(
+                    setup_key="initial-admin",
+                    admin_user_id=admin.id,
+                )
+            )
+            db.commit()
+
+        response = self.client.get("/api/v1/auth/admin-setup/status")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {"available": False})
+        with self.session_factory() as db:
+            self.assertEqual(db.query(User).count(), 1)
+            self.assertEqual(db.query(AdminSetupState).count(), 1)
+            self.assertEqual(db.query(User).one().user_role, "ADMIN")
+
+    def test_email_password_login_remains_supported(self) -> None:
+        user = User(
+            email="existing@example.com",
+            phone_number="+919876543210",
+            phone="9876543210",
+            password_hash=hash_password("a-strong-password"),
+            full_name="Existing Seeker",
+            user_role="SEEKER",
+            is_active=True,
+        )
+        with self.session_factory() as db:
+            db.add(user)
+            db.commit()
+
+        response = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "EXISTING@example.com",
+                "password": "a-strong-password",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["user"]["user_role"], "SEEKER")
+        self.assertTrue(response.json()["access_token"])
+
+    def test_phone_password_login_rejects_invalid_credentials(self) -> None:
+        self._create_user("+919876543210", "OWNER")
+        response = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "phone_number": "9876543210",
+                "password": "incorrect-password",
+            },
+        )
+        self.assertEqual(response.status_code, 401)
 
     def test_public_registration_cannot_create_admin_and_expired_token_is_rejected(self) -> None:
         registration = self.client.post(
@@ -251,102 +306,24 @@ class AdminProvisioningTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-    def test_first_admin_setup_hashes_password_and_authenticates(self) -> None:
+    def test_admin_setup_route_does_not_create_or_recreate_accounts(self) -> None:
         status_response = self.client.get("/api/v1/auth/admin-setup/status")
         self.assertEqual(status_response.status_code, 200)
         self.assertEqual(status_response.json(), {"available": True})
 
-        payload = {
-            "full_name": "First Admin",
-            "phone_number": "9876543210",
-            "email": "Admin@FindEasy.com",
-            "password": "SecureAdmin1!",
-            "setup_token": f" \r\n{settings.ADMIN_SETUP_TOKEN}\t ",
-        }
-        created = self.client.post("/api/v1/auth/admin-setup", json=payload)
-        self.assertEqual(created.status_code, 201, created.text)
-        self.assertTrue(created.json()["success"])
-
-        with self.session_factory() as db:
-            admin = db.query(User).filter(User.phone_number == "+919876543210").one()
-            self.assertEqual(admin.user_role, "ADMIN")
-            self.assertEqual(admin.email, "admin@findeasy.com")
-            self.assertNotEqual(admin.password_hash, payload["password"])
-            self.assertTrue(verify_password(payload["password"], admin.password_hash))
-
-        login = self.client.post(
-            "/api/v1/auth/login",
-            json={
-                "phone_number": payload["phone_number"],
-                "password": payload["password"],
-            },
-        )
-        self.assertEqual(login.status_code, 200, login.text)
-        self.assertEqual(login.json()["user"]["user_role"], "ADMIN")
-        self.assertTrue(login.json()["access_token"])
-        self.assertEqual(
-            self.client.get("/api/v1/auth/admin-setup/status").json(),
-            {"available": False},
-        )
-
-        duplicate = self.client.post(
+        response = self.client.post(
             "/api/v1/auth/admin-setup",
-            json={
-                **payload,
-                "phone_number": "9876543211",
-                "email": "other@findeasy.com",
-            },
+            json={"full_name": "Admin", "password": "a-strong-password"},
         )
-        self.assertEqual(duplicate.status_code, 409)
+        self.assertEqual(response.status_code, 404)
 
-        with self.session_factory() as db:
-            db.query(User).filter(User.user_role == "ADMIN").delete()
-            db.commit()
-        self.assertEqual(
-            self.client.get("/api/v1/auth/admin-setup/status").json(),
-            {"available": False},
-        )
-
-    def test_first_admin_setup_requires_backend_setup_token(self) -> None:
-        payload = {
-            "full_name": "First Admin",
-            "phone_number": "9876543210",
-            "password": "SecureAdmin1!",
-            "setup_token": "wrong-" + ("x" * 40),
-        }
-        response = self.client.post("/api/v1/auth/admin-setup", json=payload)
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(
-            self.client.get("/api/v1/auth/admin-setup/status").json(),
-            {"available": True},
-        )
         with self.session_factory() as db:
             self.assertEqual(db.query(User).count(), 0)
 
-    def test_first_admin_setup_rejects_missing_or_unconfigured_setup_key(self) -> None:
-        payload = {
-            "full_name": "First Admin",
-            "phone_number": "9876543210",
-            "password": "SecureAdmin1!",
-        }
-        missing_key = self.client.post("/api/v1/auth/admin-setup", json=payload)
-        self.assertEqual(missing_key.status_code, 422)
-
-        payload["setup_token"] = settings.ADMIN_SETUP_TOKEN
-        settings.ADMIN_SETUP_TOKEN = ""
-        unconfigured_key = self.client.post(
-            "/api/v1/auth/admin-setup",
-            json=payload,
-        )
-        self.assertEqual(unconfigured_key.status_code, 404)
-        with self.session_factory() as db:
-            self.assertEqual(db.query(User).count(), 0)
-
-    def test_setup_status_is_unavailable_without_backend_token(self) -> None:
-        settings.ADMIN_SETUP_TOKEN = ""
+    def test_setup_status_depends_on_existing_state_not_setup_token(self) -> None:
         status_response = self.client.get("/api/v1/auth/admin-setup/status")
         self.assertEqual(status_response.status_code, 200)
-        self.assertEqual(status_response.json(), {"available": False})
+        self.assertEqual(status_response.json(), {"available": True})
 
 
 if __name__ == "__main__":

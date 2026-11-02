@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user
+from app.api.routes.auth import get_current_owner
 from app.db.database import get_db
 from app.models.listing import Listing
 from app.models.listing_sharing import ListingSharing
@@ -123,7 +123,7 @@ def listing_to_response(
 def create_owner_listing(
     data: ListingCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     listing, is_duplicate = create_listing(
         db=db,
@@ -155,7 +155,7 @@ def create_owner_listing(
 )
 def get_owner_listings(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     listings = (
         db.query(Listing)
@@ -182,7 +182,7 @@ def get_owner_listings(
 def get_owner_listing(
     listing_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     listing = (
         db.query(Listing)
@@ -217,7 +217,7 @@ def update_owner_listing(
     listing_id: str,
     data: ListingCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     try:
         listing, is_duplicate = update_listing(
@@ -271,7 +271,7 @@ def update_owner_listing(
 def delete_owner_listing(
     listing_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     listing = (
         db.query(Listing)
