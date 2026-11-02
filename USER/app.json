@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "FindEasy",
+    "slug": "findeasy-user",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "findeasy-user",
+    "icon": "./assets/images/findmyeasy-logo.png",
+    "ios": {
+      "bundleIdentifier": "com.findmyeasy.user",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.findmyeasy.user",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/findmyeasy-logo.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "expo-secure-store",
+      "react-native-maps",
+      "expo-status-bar"
+    ],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
