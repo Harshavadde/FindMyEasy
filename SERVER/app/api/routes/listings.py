@@ -72,6 +72,7 @@ def listing_to_response(
             {
                 "id": image.id,
                 "image_url": image.image_url,
+                "thumbnail_url": image.thumbnail_url,
                 "image_type": image.image_type,
                 "original_filename": image.original_filename,
             }

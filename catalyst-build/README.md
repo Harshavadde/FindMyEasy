@@ -12,6 +12,10 @@ This directory is a clean deployment copy of the FindEasy backend. Source change
 
 AppSail supplies the listen port through `X_ZOHO_CATALYST_LISTEN_PORT`.
 `run.py` defaults to port 9000 when the variable is absent.
+The Catalyst CLI `predeploy` hook installs `requirements.txt` into the package
+root before upload, selecting Linux x86_64 wheels for Python 3.13 so deployment
+from Windows does not bundle Windows-native extensions. The container startup
+command does not install packages or write to a separate vendor directory.
 
 ## Configure environment variables
 
@@ -91,11 +95,28 @@ catalyst -p 89855000000016028 deploy appsail
 
 The explicit project ID prevents deploying to a different project. The
 `catalyst.json` manifest selects the existing `FindEasy-api` AppSail service.
+The AppSail `predeploy` hook stages dependencies into the package before the
+CLI creates the deployment archive; its runtime command only starts Uvicorn.
 This command deploys to Catalyst's Development environment; confirm that is
 the intended environment before running it. Configure all required
 environment variables in Catalyst before deploying or starting the service.
 
 ## Database migration safety
+
+Before deploying the Admin listing-review update, apply
+[`migrations/listing_review_rejection_reason.sql`](./migrations/listing_review_rejection_reason.sql)
+to the Development database. It adds a nullable column and does not rewrite or
+remove existing listings.
+
+Before deploying administrator account management, apply
+[`migrations/admin_account_audit_log.sql`](./migrations/admin_account_audit_log.sql)
+to the Development database. This additive migration creates only the audit
+table and does not modify existing users or listings.
+
+Before deploying the image upload optimization, apply
+[`migrations/listing_image_thumbnail.sql`](./migrations/listing_image_thumbnail.sql)
+to the Development database. It adds a nullable preview URL; existing image
+URLs remain intact and are used as fallback.
 
 `migrate.py` creates missing tables, applies the existing `users.phone` column
 change, and adds the nullable listing owner column, index, and foreign key if

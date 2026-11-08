@@ -1,4 +1,3 @@
-import Constants from "expo-constants";
 import {
   getAccessToken,
   getSessionGeneration,
@@ -7,43 +6,8 @@ import {
   trackOwnerRequest,
 } from "../services/session";
 
-/**
- * API BASE URL RESOLUTION (in order):
- * 1. EXPO_PUBLIC_API_URL from .env      e.g. EXPO_PUBLIC_API_URL=http://192.168.0.10:8000
- * 2. The IP of the PC running Expo (auto-detected, so it survives IP changes)
- * 3. Local development fallback or the deployed API URL for release builds
- */
-const API_PORT = 8000;
-const FALLBACK_LAN_IP = "192.168.0.8";
-const FALLBACK_API_URL =
+export const API_BASE_URL =
   "https://findeasy-api-10137192097.development.catalystappsail.com";
-
-const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
-
-function resolveBaseUrl(): string {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl) {
-    return envUrl.replace(/\/+$/, "");
-  }
-
-  const hostUri: string | undefined =
-    Constants.expoConfig?.hostUri ??
-    (Constants as any).expoGoConfig?.debuggerHost ??
-    (Constants as any).manifest?.debuggerHost;
-
-  if (hostUri) {
-    const host = hostUri.split(":")[0];
-    if (IPV4.test(host)) {
-      return `http://${host}:${API_PORT}`;
-    }
-  }
-
-  return __DEV__
-    ? `http://${FALLBACK_LAN_IP}:${API_PORT}`
-    : FALLBACK_API_URL;
-}
-
-export const API_BASE_URL = resolveBaseUrl();
 
 export type ApiErrorKind = "auth" | "network" | "timeout" | "http";
 

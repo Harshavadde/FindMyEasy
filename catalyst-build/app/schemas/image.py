@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ImageType(str, Enum):
@@ -16,8 +16,8 @@ class ImageResponse(BaseModel):
     id: str
     listing_id: str
     image_url: str
+    thumbnail_url: str | None = None
     image_type: ImageType
     original_filename: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

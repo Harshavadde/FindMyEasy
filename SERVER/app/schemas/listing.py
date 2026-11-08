@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -9,6 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 class ListingImageResponse(BaseModel):
     id: str
     image_url: str
+    thumbnail_url: str | None = None
     image_type: str
     original_filename: str | None = None
 
@@ -195,4 +198,50 @@ class ListingResponse(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
 
+    restrictions: str | None = None
+
     status: str
+
+
+class AdminListingResponse(ListingResponse):
+    owner_name: str | None = None
+    owner_email: str | None = None
+    owner_user_role: str | None = None
+    owner_is_active: bool | None = None
+    created_at: datetime
+    updated_at: datetime
+    rejection_reason: str | None = None
+
+
+class AdminListingSummary(BaseModel):
+    id: str
+    name: str
+    property_type: str
+    gender: str
+    monthly_price: int
+    total_beds: int
+    available_beds: int
+    filled_beds: int
+    city: str | None = None
+    area: str | None = None
+    owner_phone: str | None = None
+    status: str
+    preview_image_url: str | None = None
+    owner_name: str | None = None
+    owner_email: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    rejection_reason: str | None = None
+
+
+class AdminListingPage(BaseModel):
+    items: list[AdminListingSummary]
+    cities: list[str]
+    total: int
+    total_listings: int
+    review_count: int
+    published_count: int
+    rejected_count: int
+    page: int
+    page_size: int
+    total_pages: int

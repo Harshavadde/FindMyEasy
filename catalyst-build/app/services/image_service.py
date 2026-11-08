@@ -1,12 +1,14 @@
 
 import os
 import uuid
+from io import BytesIO
 from urllib.parse import quote
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -20,6 +22,7 @@ ALLOWED_CONTENT_TYPES = {
     "image/png": ".png",
     "image/webp": ".webp",
 }
+MAX_THUMBNAIL_PIXELS = 40_000_000
 
 
 def validate_image_bytes(
@@ -50,6 +53,32 @@ def validate_image_bytes(
             status_code=400,
             detail="Image data does not match its content type.",
         )
+
+
+def create_listing_thumbnail(file_data: bytes) -> bytes:
+    try:
+        with Image.open(BytesIO(file_data)) as image:
+            if image.width * image.height > MAX_THUMBNAIL_PIXELS:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Image dimensions are too large to process.",
+                )
+            thumbnail = ImageOps.exif_transpose(image)
+            thumbnail.thumbnail((480, 360), Image.Resampling.LANCZOS)
+            if thumbnail.mode not in ("RGB", "RGBA"):
+                thumbnail = thumbnail.convert(
+                    "RGBA" if "A" in thumbnail.getbands() else "RGB"
+                )
+            output = BytesIO()
+            thumbnail.save(output, format="WEBP", quality=76, method=4)
+            return output.getvalue()
+    except HTTPException:
+        raise
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError) as error:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded image could not be decoded.",
+        ) from error
 
 
 def get_storage_config():
@@ -149,6 +178,8 @@ def save_listing_image_bytes(
     object_key = (
         f"listings/{listing_id}/{safe_type}/{uuid.uuid4()}{extension}"
     )
+    thumbnail_key = f"{object_key.rsplit('.', 1)[0]}-thumbnail.webp"
+    thumbnail_data = create_listing_thumbnail(file_data)
 
     # Never trust a client-supplied path or filename.
     clean_filename = os.path.basename(
@@ -159,6 +190,7 @@ def save_listing_image_bytes(
     endpoint = ""
     bucket = ""
     uploaded = False
+    thumbnail_uploaded = False
 
     try:
         client, endpoint, bucket = create_storage_client()
@@ -169,18 +201,32 @@ def save_listing_image_bytes(
             Key=object_key,
             Body=file_data,
             ContentType=content_type,
+            CacheControl="public, max-age=31536000, immutable",
         )
         uploaded = True
+        client.put_object(
+            Bucket=bucket,
+            Key=thumbnail_key,
+            Body=thumbnail_data,
+            ContentType="image/webp",
+            CacheControl="public, max-age=31536000, immutable",
+        )
+        thumbnail_uploaded = True
 
         # This bucket must allow public reads for this URL format.
         image_url = (
             f"{endpoint}/{quote(bucket, safe='')}/"
             f"{quote(object_key, safe='/')}"
         )
+        thumbnail_url = (
+            f"{endpoint}/{quote(bucket, safe='')}/"
+            f"{quote(thumbnail_key, safe='/')}"
+        )
 
         image_record = ListingImage(
             listing_id=listing_id,
             image_url=image_url,
+            thumbnail_url=thumbnail_url,
             image_type=image_type.value,
             original_filename=clean_filename or "photo.jpg",
         )
@@ -204,6 +250,14 @@ def save_listing_image_bytes(
     except (BotoCoreError, ClientError) as error:
         db.rollback()
         print("Neon Object Storage upload failed:", repr(error))
+        _remove_uploaded_objects(
+            client,
+            bucket,
+            object_key,
+            thumbnail_key,
+            uploaded,
+            thumbnail_uploaded,
+        )
 
         raise HTTPException(
             status_code=502,
@@ -215,19 +269,38 @@ def save_listing_image_bytes(
         print("Listing image save failed:", repr(error))
 
         # Avoid leaving an orphaned object if the DB insert fails.
-        if uploaded and client is not None:
-            try:
-                client.delete_object(
-                    Bucket=bucket,
-                    Key=object_key,
-                )
-            except Exception as cleanup_error:
-                print(
-                    "Object cleanup failed:",
-                    repr(cleanup_error),
-                )
+        _remove_uploaded_objects(
+            client,
+            bucket,
+            object_key,
+            thumbnail_key,
+            uploaded,
+            thumbnail_uploaded,
+        )
 
         raise HTTPException(
             status_code=500,
             detail="Unable to save the listing image.",
         ) from error
+
+
+def _remove_uploaded_objects(
+    client,
+    bucket: str,
+    object_key: str,
+    thumbnail_key: str,
+    uploaded: bool,
+    thumbnail_uploaded: bool,
+) -> None:
+    if client is None:
+        return
+    keys = []
+    if uploaded:
+        keys.append(object_key)
+    if thumbnail_uploaded:
+        keys.append(thumbnail_key)
+    for key in keys:
+        try:
+            client.delete_object(Bucket=bucket, Key=key)
+        except Exception as cleanup_error:
+            print("Object cleanup failed:", repr(cleanup_error))

@@ -2,16 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import {
-  AdminConsoleShell,
   useAdminConsole,
 } from "@/components/AdminConsoleShell";
+import { DeleteOwnerApplicationDialog } from "@/components/DeleteOwnerApplicationDialog";
 import {
   approveAdminOwnerApplication,
   ApiError,
   createAdminOwnerInvitation,
+  deleteAdminOwnerApplication,
   getAdminOwnerApplication,
   getAdminOwnerInvitations,
   rejectAdminOwnerApplication,
@@ -72,6 +73,7 @@ function DetailField({ label, value }: { label: string; value: string }) {
 function ApplicationDetailContent() {
   const { token, signOut } = useAdminConsole();
   const params = useParams<{ applicationId: string }>();
+  const router = useRouter();
   const applicationId = params.applicationId;
   const [application, setApplication] =
     useState<AdminOwnerApplicationDetail | null>(null);
@@ -90,17 +92,26 @@ function ApplicationDetailContent() {
   const [invitationsLoading, setInvitationsLoading] = useState(false);
   const [invitationLink, setInvitationLink] = useState("");
   const [copyError, setCopyError] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal, showLoading = true) => {
     if (!token) {
       signOut();
       return;
     }
-    setLoading(true);
+    if (showLoading) setLoading(true);
     setError("");
     try {
-      setApplication(await getAdminOwnerApplication(token, applicationId));
+      const result = await getAdminOwnerApplication(
+        token,
+        applicationId,
+        signal
+      );
+      if (!signal?.aborted) setApplication(result);
     } catch (loadError) {
+      if (signal?.aborted) return;
       setApplication(null);
       if (
         loadError instanceof ApiError &&
@@ -117,18 +128,25 @@ function ApplicationDetailContent() {
             : "Unable to load application details."
       );
     } finally {
-      setLoading(false);
+      if (showLoading && !signal?.aborted) setLoading(false);
     }
   }, [applicationId, signOut, token]);
 
-  const loadInvitations = useCallback(async () => {
+  const loadInvitations = useCallback(async (signal?: AbortSignal) => {
     if (!token) return;
     setInvitationsLoading(true);
     try {
-      const result = await getAdminOwnerInvitations(token, applicationId);
-      setInvitations(result.items);
-      setActionError("");
+      const result = await getAdminOwnerInvitations(
+        token,
+        applicationId,
+        signal
+      );
+      if (!signal?.aborted) {
+        setInvitations(result.items);
+        setActionError("");
+      }
     } catch (loadError) {
+      if (signal?.aborted) return;
       setInvitations([]);
       if (
         loadError instanceof ApiError &&
@@ -143,18 +161,21 @@ function ApplicationDetailContent() {
           : "Unable to load invitation records."
       );
     } finally {
-      setInvitationsLoading(false);
+      if (!signal?.aborted) setInvitationsLoading(false);
     }
   }, [applicationId, signOut, token]);
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load]);
 
   useEffect(() => {
-    if (application) {
-      void loadInvitations();
-    }
+    if (!application) return;
+    const controller = new AbortController();
+    void loadInvitations(controller.signal);
+    return () => controller.abort();
   }, [application?.id, loadInvitations]);
 
   useEffect(() => {
@@ -166,11 +187,15 @@ function ApplicationDetailContent() {
       return;
     }
 
+    const controller = new AbortController();
     const refreshTimer = window.setInterval(() => {
-      void load();
-      void loadInvitations();
-    }, 15000);
-    return () => window.clearInterval(refreshTimer);
+      void load(controller.signal, false);
+      void loadInvitations(controller.signal);
+    }, 30000);
+    return () => {
+      window.clearInterval(refreshTimer);
+      controller.abort();
+    };
   }, [application, load, loadInvitations]);
 
   async function confirmAction() {
@@ -243,6 +268,44 @@ function ApplicationDetailContent() {
     } finally {
       actionInProgress.current = false;
       setActionBusy(false);
+    }
+  }
+
+  async function deleteApplication() {
+    if (deleteBusy || !application) return;
+    if (!token) {
+      signOut();
+      return;
+    }
+
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await deleteAdminOwnerApplication(
+        token,
+        application.id,
+        application.application_reference
+      );
+      setDeleteOpen(false);
+      setNotice("Application deleted. Returning to the application list...");
+      window.setTimeout(() => {
+        router.replace("/dashboard/owner-applications");
+      }, 900);
+    } catch (deleteFailure) {
+      if (
+        deleteFailure instanceof ApiError &&
+        [401, 403].includes(deleteFailure.status)
+      ) {
+        signOut();
+        return;
+      }
+      setDeleteError(
+        deleteFailure instanceof Error
+          ? deleteFailure.message
+          : "The application could not be deleted."
+      );
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -332,9 +395,22 @@ function ApplicationDetailContent() {
                 Submitted {formatDate(application.submitted_at)}
               </p>
             </div>
-            <span className="inline-flex self-start rounded-full bg-blue-50 px-4 py-2 text-sm font-extrabold text-blue-700 sm:self-auto">
-              {STATUS_LABELS[application.status]}
-            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex self-start rounded-full bg-blue-50 px-4 py-2 text-sm font-extrabold text-blue-700">
+                {STATUS_LABELS[application.status]}
+              </span>
+              <button
+                className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                disabled={deleteBusy}
+                onClick={() => {
+                  setDeleteError("");
+                  setDeleteOpen(true);
+                }}
+                type="button"
+              >
+                Delete application
+              </button>
+            </div>
           </section>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-2">
@@ -807,17 +883,24 @@ function ApplicationDetailContent() {
           </section>
         </div>
       )}
+      {deleteOpen && application && (
+        <DeleteOwnerApplicationDialog
+          application={application}
+          busy={deleteBusy}
+          error={deleteError}
+          onClose={() => {
+            if (!deleteBusy) {
+              setDeleteOpen(false);
+              setDeleteError("");
+            }
+          }}
+          onConfirm={() => void deleteApplication()}
+        />
+      )}
     </>
   );
 }
 
 export default function OwnerApplicationDetailPage() {
-  return (
-    <AdminConsoleShell
-      activeSection="owner-applications"
-      title="Application Details"
-    >
-      <ApplicationDetailContent />
-    </AdminConsoleShell>
-  );
+  return <ApplicationDetailContent />;
 }

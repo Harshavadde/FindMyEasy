@@ -26,6 +26,11 @@ class ListingImage(Base):
         nullable=False,
     )
 
+    thumbnail_url = Column(
+        String(500),
+        nullable=True,
+    )
+
     image_type = Column(
         String(30),
         nullable=False,

@@ -193,6 +193,12 @@ class AdminProvisioningTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["user"]["user_role"], "ADMIN")
         token = response.json()["access_token"]
+        claims = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=["HS256"],
+        )
+        self.assertEqual(claims["sub"], admin.id)
         admin_response = self.client.get(
             "/api/v1/admin/listings",
             headers={"Authorization": f"Bearer {token}"},
@@ -268,6 +274,23 @@ class AdminProvisioningTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["user"]["user_role"], "SEEKER")
         self.assertTrue(response.json()["access_token"])
+
+    def test_login_requires_exactly_one_email_or_phone_identifier(self) -> None:
+        missing_identifier = self.client.post(
+            "/api/v1/auth/login",
+            json={"password": "a-strong-password"},
+        )
+        both_identifiers = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "existing@example.com",
+                "phone_number": "9876543210",
+                "password": "a-strong-password",
+            },
+        )
+
+        self.assertEqual(missing_identifier.status_code, 422)
+        self.assertEqual(both_identifiers.status_code, 422)
 
     def test_phone_password_login_rejects_invalid_credentials(self) -> None:
         self._create_user("+919876543210", "OWNER")

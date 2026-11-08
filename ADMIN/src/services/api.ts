@@ -1,17 +1,25 @@
 import type {
   AdminListingContract,
+  AdminListingSummaryContract,
   ListingImageContract,
 } from "@shared/contracts/listings";
 
 const API_PREFIX = "/api/backend";
 const REQUEST_TIMEOUT_MS = 10_000;
-export type { AdminListingContract, ListingImageContract };
+export type {
+  AdminListingContract,
+  AdminListingSummaryContract,
+  ListingImageContract,
+};
 
 export type AdminUser = {
   id: string;
+  email: string | null;
   full_name: string | null;
   phone_number: string | null;
   user_role: "SEEKER" | "OWNER" | "ADMIN";
+  is_active: boolean;
+  created_at: string | null;
 };
 
 export type AuthResult = {
@@ -35,6 +43,13 @@ export type AdminSetupInput = {
 export type AdminSetupResult = {
   success: boolean;
   message: string;
+};
+
+export type AdminAccountInput = {
+  full_name: string;
+  phone_number: string;
+  email?: string;
+  password: string;
 };
 
 export type OwnerApplicationStatus =
@@ -111,6 +126,14 @@ export type AdminOwnerApplicationDetail = AdminOwnerApplicationSummary & {
   history_available: boolean;
 };
 
+export type AdminOwnerApplicationDeletionResult = {
+  application_id: string;
+  application_reference: string;
+  deleted_history_records: number;
+  deleted_invitation_records: number;
+  deleted_linked_owner_account: boolean;
+};
+
 export type AdminApplicationDecisionResult = {
   application_id: string;
   status: OwnerApplicationStatus;
@@ -148,6 +171,29 @@ export type AdminOwnerApplicationFilters = {
   page_size: number;
 };
 
+export type AdminListingFilters = {
+  search?: string;
+  status?: "review" | "published" | "rejected";
+  city?: string;
+  sort_by?: "created_at" | "name" | "city" | "monthly_price" | "status";
+  sort_order?: "asc" | "desc";
+  page: number;
+  page_size: number;
+};
+
+export type AdminListingPage = {
+  items: AdminListingSummaryContract[];
+  cities: string[];
+  total: number;
+  total_listings: number;
+  review_count: number;
+  published_count: number;
+  rejected_count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+};
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -158,21 +204,42 @@ export class ApiError extends Error {
   }
 }
 
+export function normalizeIndianPhoneInput(value: string): string {
+  let digits = value.replace(/\D/g, "");
+  if (digits.length === 14 && digits.startsWith("0091")) {
+    digits = digits.slice(4);
+  } else if (digits.length === 12 && digits.startsWith("91")) {
+    digits = digits.slice(2);
+  } else if (digits.length === 11 && digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+  if (digits.length > 10) return "";
+  return digits.slice(0, 10);
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
   token?: string,
-  timeoutMs?: number
+  timeoutMs = REQUEST_TIMEOUT_MS
 ): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const controller = new AbortController();
-  const timeoutId =
-    timeoutMs === undefined
-      ? undefined
-      : setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const externalSignal = options.signal;
+  const abortRequest = () => controller.abort();
+  if (externalSignal?.aborted) {
+    controller.abort();
+  } else {
+    externalSignal?.addEventListener("abort", abortRequest, { once: true });
+  }
   try {
     const response = await fetch(`${API_PREFIX}${path}`, {
       ...options,
@@ -200,20 +267,41 @@ async function request<T>(
 
     return data as T;
   } catch (error) {
-    if (controller.signal.aborted) {
+    if (timedOut) {
       throw new ApiError(
-        "The Admin API did not respond within 10 seconds. Check that FastAPI is running, then retry.",
+        "The Admin API did not respond within 10 seconds. Check your connection and retry.",
         408
       );
     }
     if (error instanceof TypeError) {
       throw new Error(
-        "Could not reach the Admin API. Check that FastAPI is running and the Next.js API origin is correct."
+        "Could not reach the FindEasy Admin API. Check your connection and hosted API configuration."
       );
     }
     throw error;
   } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", abortRequest);
+  }
+}
+
+const OWNER_APPLICATION_STATS_CACHE_MS = 30_000;
+const ownerApplicationStatsCache = new Map<
+  string,
+  { expiresAt: number; value: AdminOwnerApplicationStats }
+>();
+const ownerApplicationStatsInFlight = new Map<
+  string,
+  Promise<AdminOwnerApplicationStats>
+>();
+
+export function invalidateAdminReadCache(token?: string) {
+  if (token) {
+    ownerApplicationStatsCache.delete(token);
+    ownerApplicationStatsInFlight.delete(token);
+  } else {
+    ownerApplicationStatsCache.clear();
+    ownerApplicationStatsInFlight.clear();
   }
 }
 
@@ -225,7 +313,7 @@ export async function login(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      phone_number: phoneNumber,
+      phone_number: `+91${normalizeIndianPhoneInput(phoneNumber)}`,
       password,
     }),
   });
@@ -271,40 +359,133 @@ export function createInitialAdmin(
 }
 
 export function getAdminListings(
-  token: string
-): Promise<AdminListingContract[]> {
-  return request<AdminListingContract[]>("/api/v1/admin/listings", {}, token);
+  token: string,
+  filters: AdminListingFilters,
+  signal?: AbortSignal
+): Promise<AdminListingPage> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") {
+      query.set(key, String(value));
+    }
+  }
+  return request<AdminListingPage>(
+    `/api/v1/admin/listings?${query.toString()}`,
+    { signal },
+    token
+  );
+}
+
+export function getAdminAccounts(
+  token: string,
+  signal?: AbortSignal
+): Promise<AdminUser[]> {
+  return request<AdminUser[]>("/api/v1/admin/administrators", { signal }, token);
+}
+
+export function createAdminAccount(
+  token: string,
+  input: AdminAccountInput
+): Promise<AdminUser> {
+  return request<AdminUser>(
+    "/api/v1/admin/administrators",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+    token
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
+}
+
+export function disableAdminAccount(
+  token: string,
+  adminId: string
+): Promise<AdminUser> {
+  return request<AdminUser>(
+    `/api/v1/admin/administrators/${encodeURIComponent(adminId)}/disable`,
+    { method: "POST" },
+    token
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
+}
+
+export function getAdminListing(
+  token: string,
+  listingId: string,
+  signal?: AbortSignal
+): Promise<AdminListingContract> {
+  return request<AdminListingContract>(
+    `/api/v1/admin/listings/${encodeURIComponent(listingId)}`,
+    { signal },
+    token
+  );
 }
 
 export function updateListingStatus(
   token: string,
   listingId: string,
-  status: "published" | "rejected"
+  status: "published" | "rejected",
+  rejectionReason?: string
 ): Promise<AdminListingContract> {
   return request<AdminListingContract>(
     `/api/v1/admin/listings/${encodeURIComponent(listingId)}/status`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({
+        status,
+        ...(status === "rejected"
+          ? { rejection_reason: rejectionReason }
+          : {}),
+      }),
     },
     token
-  );
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
 }
 
 export function getAdminOwnerApplicationStats(
   token: string
 ): Promise<AdminOwnerApplicationStats> {
-  return request<AdminOwnerApplicationStats>(
+  const cached = ownerApplicationStatsCache.get(token);
+  if (cached && cached.expiresAt > Date.now()) {
+    return Promise.resolve(cached.value);
+  }
+  const existing = ownerApplicationStatsInFlight.get(token);
+  if (existing) return existing;
+  const pending = request<AdminOwnerApplicationStats>(
     "/api/v1/admin/owner-applications/stats",
     {},
     token
-  );
+  ).then((result) => {
+    if (ownerApplicationStatsInFlight.get(token) === pending) {
+      ownerApplicationStatsCache.set(token, {
+        expiresAt: Date.now() + OWNER_APPLICATION_STATS_CACHE_MS,
+        value: result,
+      });
+    }
+    return result;
+  });
+  ownerApplicationStatsInFlight.set(token, pending);
+  return pending.finally(() => {
+    if (ownerApplicationStatsInFlight.get(token) === pending) {
+      ownerApplicationStatsInFlight.delete(token);
+    }
+  });
 }
 
 export function getAdminOwnerApplications(
   token: string,
-  filters: AdminOwnerApplicationFilters
+  filters: AdminOwnerApplicationFilters,
+  signal?: AbortSignal
 ): Promise<AdminOwnerApplicationPage> {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
@@ -314,20 +495,40 @@ export function getAdminOwnerApplications(
   }
   return request<AdminOwnerApplicationPage>(
     `/api/v1/admin/owner-applications?${query.toString()}`,
-    {},
+    { signal },
     token
   );
 }
 
 export function getAdminOwnerApplication(
   token: string,
-  applicationId: string
+  applicationId: string,
+  signal?: AbortSignal
 ): Promise<AdminOwnerApplicationDetail> {
   return request<AdminOwnerApplicationDetail>(
     `/api/v1/admin/owner-applications/${encodeURIComponent(applicationId)}`,
-    {},
+    { signal },
     token
   );
+}
+
+export function deleteAdminOwnerApplication(
+  token: string,
+  applicationId: string,
+  applicationReference: string
+): Promise<AdminOwnerApplicationDeletionResult> {
+  return request<AdminOwnerApplicationDeletionResult>(
+    `/api/v1/admin/owner-applications/${encodeURIComponent(applicationId)}`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ application_reference: applicationReference }),
+    },
+    token
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
 }
 
 export function approveAdminOwnerApplication(
@@ -338,7 +539,10 @@ export function approveAdminOwnerApplication(
     `/api/v1/admin/owner-applications/${encodeURIComponent(applicationId)}/approve`,
     { method: "POST" },
     token
-  );
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
 }
 
 export function rejectAdminOwnerApplication(
@@ -354,7 +558,10 @@ export function rejectAdminOwnerApplication(
       body: JSON.stringify(input),
     },
     token
-  );
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
 }
 
 export function requestAdminOwnerApplicationInformation(
@@ -370,16 +577,20 @@ export function requestAdminOwnerApplicationInformation(
       body: JSON.stringify({ message }),
     },
     token
-  );
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
 }
 
 export function getAdminOwnerInvitations(
   token: string,
-  applicationId: string
+  applicationId: string,
+  signal?: AbortSignal
 ): Promise<{ items: AdminOwnerInvitation[] }> {
   return request<{ items: AdminOwnerInvitation[] }>(
     `/api/v1/admin/owner-applications/${encodeURIComponent(applicationId)}/invitations`,
-    {},
+    { signal },
     token
   );
 }
@@ -392,7 +603,10 @@ export function createAdminOwnerInvitation(
     `/api/v1/admin/owner-applications/${encodeURIComponent(applicationId)}/invitations`,
     { method: "POST" },
     token
-  );
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
 }
 
 export function revokeAdminOwnerInvitation(
@@ -403,11 +617,17 @@ export function revokeAdminOwnerInvitation(
     `/api/v1/admin/owner-applications/invitations/${encodeURIComponent(invitationId)}/revoke`,
     { method: "POST" },
     token
-  );
+  ).then((result) => {
+    invalidateAdminReadCache(token);
+    return result;
+  });
 }
 
-export function getCurrentAdmin(token: string): Promise<AdminUser> {
-  return request<AdminUser>("/api/v1/auth/me", {}, token);
+export function getCurrentAdmin(
+  token: string,
+  signal?: AbortSignal
+): Promise<AdminUser> {
+  return request<AdminUser>("/api/v1/auth/me", { signal }, token);
 }
 
 export function apiImageUrl(value: string): string {

@@ -34,6 +34,7 @@ engine_kwargs = {
     "pool_size": settings.DB_POOL_SIZE,
     "max_overflow": settings.DB_MAX_OVERFLOW,
     "pool_timeout": settings.DB_POOL_TIMEOUT_SECONDS,
+    "hide_parameters": True,
 }
 
 if DATABASE_URL.startswith("postgresql+"):

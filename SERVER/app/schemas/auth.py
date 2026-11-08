@@ -1,17 +1,11 @@
-
 import re
+from datetime import datetime
 from typing import Literal
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    EmailStr,
-    Field,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 UserRole = Literal["ADMIN", "OWNER", "SEEKER"]
+UserRoleValue = Literal["SEEKER", "OWNER"]
 
 
 def normalize_phone_number(value: str) -> str:
@@ -67,7 +61,68 @@ class LoginRequest(BaseModel):
         if (self.email is None) == (self.phone_number is None):
             raise ValueError("Provide either an email address or phone number.")
         return self
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+
+
+class PhonePasswordRegisterRequest(BaseModel):
+    phone_number: str
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=1, max_length=150)
+    user_role: UserRoleValue = "SEEKER"
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str) -> str:
+        return normalize_phone_number(value)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Password cannot be empty.")
+        return value
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Full name cannot be empty.")
+        return value
+
+
+class PhonePasswordLoginRequest(BaseModel):
+    phone_number: str
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str) -> str:
+        return normalize_phone_number(value)
+
+
+class RequestOtpRequest(BaseModel):
+    phone_number: str
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str) -> str:
+        return normalize_phone_number(value)
+
+
+class VerifyOtpRequest(RequestOtpRequest):
+    otp: str = Field(pattern=r"^\d{6}$")
+    full_name: str | None = Field(default=None, min_length=1, max_length=150)
+    user_role: UserRoleValue | None = None
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Full name cannot be empty.")
+        return normalized
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -106,6 +161,8 @@ class UserResponse(BaseModel):
     user_role: UserRole
     phone: str | None = None
     is_phone_verified: bool = False
+    is_active: bool = True
+    created_at: datetime | None = None
 
 
 class AdminSetupStatus(BaseModel):

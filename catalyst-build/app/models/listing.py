@@ -159,6 +159,7 @@ class Listing(Base):
         server_default="draft",
         index=True,
     )
+    rejection_reason = Column(Text, nullable=True)
 
     # ------------------------------------------------------------------
     # TIMESTAMPS

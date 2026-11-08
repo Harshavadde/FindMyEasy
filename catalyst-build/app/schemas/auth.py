@@ -1,7 +1,11 @@
-
 import re
+from datetime import datetime
+from typing import Literal
 
-from pydantic import field_validator, BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+UserRole = Literal["ADMIN", "OWNER", "SEEKER"]
+UserRoleValue = Literal["SEEKER", "OWNER"]
 
 
 def normalize_phone_number(value: str) -> str:
@@ -17,8 +21,65 @@ def normalize_phone_number(value: str) -> str:
 
 class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
-    email: EmailStr
+    email: EmailStr | None = None
+    phone_number: str | None = None
     password: str = Field(min_length=8, max_length=128)
+    user_role: Literal["SEEKER"] = "SEEKER"
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str | None) -> str | None:
+        return normalize_phone_number(value) if value is not None else None
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Full name cannot be empty.")
+        return value
+
+    @model_validator(mode="after")
+    def require_login_identifier(self):
+        if self.email is None and self.phone_number is None:
+            raise ValueError("Provide an email address or phone number.")
+        return self
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr | None = None
+    phone_number: str | None = None
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str | None) -> str | None:
+        return normalize_phone_number(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def require_one_login_identifier(self):
+        if (self.email is None) == (self.phone_number is None):
+            raise ValueError("Provide either an email address or phone number.")
+        return self
+
+
+class PhonePasswordRegisterRequest(BaseModel):
+    phone_number: str
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=1, max_length=150)
+    user_role: UserRoleValue = "SEEKER"
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str) -> str:
+        return normalize_phone_number(value)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Password cannot be empty.")
+        return value
 
     @field_validator("full_name")
     @classmethod
@@ -29,10 +90,39 @@ class RegisterRequest(BaseModel):
         return value
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
+class PhonePasswordLoginRequest(BaseModel):
+    phone_number: str
     password: str = Field(min_length=1, max_length=128)
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str) -> str:
+        return normalize_phone_number(value)
+
+
+class RequestOtpRequest(BaseModel):
+    phone_number: str
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value: str) -> str:
+        return normalize_phone_number(value)
+
+
+class VerifyOtpRequest(RequestOtpRequest):
+    otp: str = Field(pattern=r"^\d{6}$")
+    full_name: str | None = Field(default=None, min_length=1, max_length=150)
+    user_role: UserRoleValue | None = None
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Full name cannot be empty.")
+        return normalized
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -65,9 +155,18 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    email: EmailStr
+    email: EmailStr | None = None
     full_name: str | None = None
+    phone_number: str | None = None
+    user_role: UserRole
     phone: str | None = None
+    is_phone_verified: bool = False
+    is_active: bool = True
+    created_at: datetime | None = None
+
+
+class AdminSetupStatus(BaseModel):
+    available: bool
 
 
 class AuthResponse(BaseModel):

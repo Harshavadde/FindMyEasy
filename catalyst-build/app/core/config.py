@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,8 +12,25 @@ class Settings(BaseSettings):
     MAX_IMAGE_SIZE_MB: int = 10
 
     # Authentication
-    AUTH_SECRET_KEY: str = "change-me-before-deployment"
+    JWT_SECRET_KEY: str = Field(
+        default="change-me-before-deployment",
+        validation_alias=AliasChoices("JWT_SECRET_KEY", "AUTH_SECRET_KEY"),
+    )
     AUTH_TOKEN_EXPIRE_MINUTES: int = 60
+    OTP_SECRET_SALT: str = ""
+    TWOFACTOR_API_KEY: str = ""
+
+    ENVIRONMENT: str = "development"
+    PHONE_OTP_ENABLED: bool = False
+    OWNER_INVITATION_TTL_HOURS: int = 72
+    OWNER_REGISTRATION_BASE_URL: str = "findeasy://owner/register"
+
+    OWNER_EMAIL_SMTP_HOST: str = ""
+    OWNER_EMAIL_SMTP_PORT: int = 587
+    OWNER_EMAIL_SMTP_USERNAME: str = ""
+    OWNER_EMAIL_SMTP_PASSWORD: str = ""
+    OWNER_EMAIL_FROM_ADDRESS: str = ""
+    OWNER_EMAIL_SMTP_USE_SSL: bool = False
 
     CORS_ORIGINS: str = "http://localhost:8081,http://localhost:19006"
 
@@ -21,11 +39,23 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT_SECONDS: int = 30
     DB_CONNECT_TIMEOUT_SECONDS: int = 10
 
+    @model_validator(mode="after")
+    def disable_otp_in_production(self):
+        if self.ENVIRONMENT.lower() == "production":
+            self.PHONE_OTP_ENABLED = False
+        return self
+
     def cors_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.CORS_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
     )
+
+
 settings = Settings()

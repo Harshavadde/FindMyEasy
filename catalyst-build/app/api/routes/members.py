@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from datetime import date
 
-from app.api.routes.auth import get_current_user
+from app.api.routes.auth import get_current_owner
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.member import (
@@ -60,7 +60,7 @@ def member_to_response(member) -> MemberResponse:
 def list_members(
     listing_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     members = get_members(
         db=db,
@@ -81,7 +81,7 @@ def list_members(
 def member_stats(
     listing_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     return get_member_stats(
         db=db,
@@ -116,7 +116,7 @@ async def add_member(
     aadhaar_photo: UploadFile | None = File(None),
 
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     from datetime import date
 
@@ -191,7 +191,7 @@ def get_single_member(
     listing_id: str,
     member_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     member = get_member(
         db=db,
@@ -231,7 +231,7 @@ async def edit_member(
     aadhaar_photo: UploadFile | None = File(None),
 
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     try:
         parsed_joining_date = date.fromisoformat(joining_date)
@@ -298,7 +298,7 @@ def remove_member(
     listing_id: str,
     member_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     return delete_member(
         db=db,

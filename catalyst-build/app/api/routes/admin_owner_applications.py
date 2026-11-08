@@ -8,13 +8,18 @@ from typing import Literal
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session, load_only
 
-from app.api.routes.auth import get_current_user
+from app.api.routes.admin import get_current_admin
 from app.core.config import settings
 from app.db.database import get_db
+from app.models.admin_setup_state import AdminSetupState
+from app.models.favorite import Favorite
+from app.models.listing import Listing
+from app.models.otp_verification import OtpVerification
 from app.models.owner_application import OwnerApplication
 from app.models.owner_application_workflow import (
     OwnerApplicationHistory,
@@ -22,12 +27,14 @@ from app.models.owner_application_workflow import (
 )
 from app.models.user import User
 from app.schemas.admin_owner_application import (
+    AdminOwnerApplicationDeletionResult,
     AdminOwnerApplicationDetail,
     AdminOwnerApplicationPage,
     AdminOwnerApplicationStats,
     OwnerApplicationRelationshipValue,
     OwnerApplicationStatusValue,
 )
+from app.schemas.auth import normalize_phone_number
 from app.schemas.owner_application_workflow import (
     ApplicationDecisionResult,
     OwnerApplicationHistoryItem,
@@ -63,6 +70,10 @@ STATUS_COUNTS = {
 DECISION_ELIGIBLE_STATUSES = {"SUBMITTED", "UNDER_REVIEW"}
 
 
+class DeleteOwnerApplicationInput(BaseModel):
+    application_reference: str = Field(min_length=1, max_length=24)
+
+
 def _owner_registration_url(token: str) -> str:
     base_url = settings.PUBLIC_BASE_URL.strip()
     parsed = urlsplit(base_url)
@@ -91,17 +102,6 @@ def _owner_registration_url(token: str) -> str:
     return urlunsplit(
         (parsed.scheme, parsed.netloc, path, "", f"token={quote(token, safe='')}")
     )
-
-
-def get_current_admin(
-    current_user: User = Depends(get_current_user),
-) -> User:
-    if current_user.user_role != "ADMIN":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator access is required.",
-        )
-    return current_user
 
 
 def _not_found() -> HTTPException:
@@ -165,6 +165,79 @@ def _application_for_update(db: Session, application_id: str) -> OwnerApplicatio
     return application
 
 
+def _owner_account_deletion_blocker(
+    db: Session,
+    *,
+    application: OwnerApplication,
+    owner: User,
+    admin: User,
+) -> str | None:
+    if owner.id == admin.id or owner.user_role != "OWNER":
+        return "The linked account is not a deletable Owner account."
+    if application.registration_completed_at is None:
+        return "The linked Owner account is missing its registration record."
+    try:
+        application_phone = normalize_phone_number(application.applicant_phone)
+        owner_phone = normalize_phone_number(owner.phone_number or owner.phone or "")
+    except ValueError:
+        return "The linked Owner account contact details do not match the application."
+    if application_phone != owner_phone:
+        return "The linked Owner account contact details do not match the application."
+    if (
+        not application.applicant_email
+        or not owner.email
+        or application.applicant_email.strip().casefold()
+        != owner.email.strip().casefold()
+    ):
+        return "The linked Owner account contact details do not match the application."
+
+    checks = (
+        (
+            db.query(Listing.id)
+            .filter(Listing.owner_id == owner.id)
+            .first(),
+            "The linked Owner account has property listings.",
+        ),
+        (
+            db.query(Favorite.id)
+            .filter(Favorite.user_id == owner.id)
+            .first(),
+            "The linked Owner account has saved listings.",
+        ),
+        (
+            db.query(OwnerApplication.id)
+            .filter(
+                OwnerApplication.owner_user_id == owner.id,
+                OwnerApplication.id != application.id,
+            )
+            .first(),
+            "The linked Owner account is referenced by another application.",
+        ),
+        (
+            db.query(OwnerApplicationHistory.id)
+            .filter(OwnerApplicationHistory.performed_by_admin_id == owner.id)
+            .first(),
+            "The linked Owner account is referenced by review history.",
+        ),
+        (
+            db.query(OwnerInvitation.id)
+            .filter(OwnerInvitation.created_by_admin_id == owner.id)
+            .first(),
+            "The linked Owner account created invitations.",
+        ),
+        (
+            db.query(AdminSetupState.setup_key)
+            .filter(AdminSetupState.admin_user_id == owner.id)
+            .first(),
+            "The linked account is referenced by Admin setup.",
+        ),
+    )
+    return next(
+        (message for record, message in checks if record is not None),
+        None,
+    )
+
+
 def _decision_result(application: OwnerApplication) -> ApplicationDecisionResult:
     return ApplicationDecisionResult(
         application_id=application.id,
@@ -218,6 +291,7 @@ def get_owner_application_stats(
         .group_by(OwnerApplication.status)
         .all()
     )
+    total_applications = sum(count for _, count in grouped_counts)
     counts = {field: 0 for field in STATUS_COUNTS.values()}
     for application_status, count in grouped_counts:
         field = STATUS_COUNTS.get(application_status)
@@ -225,7 +299,7 @@ def get_owner_application_stats(
             counts[field] = count
 
     return AdminOwnerApplicationStats(
-        total_applications=db.query(func.count(OwnerApplication.id)).scalar() or 0,
+        total_applications=total_applications,
         **counts,
     )
 
@@ -252,7 +326,7 @@ def list_owner_applications(
     ] = "submitted_at",
     sort_order: Literal["asc", "desc"] = "desc",
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=10, ge=1, le=10),
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ):
@@ -262,7 +336,22 @@ def list_owner_applications(
             detail="The submitted-from date must not be after the submitted-to date.",
         )
 
-    query = db.query(OwnerApplication)
+    query = db.query(OwnerApplication).options(
+        load_only(
+            OwnerApplication.id,
+            OwnerApplication.application_reference,
+            OwnerApplication.applicant_name,
+            OwnerApplication.applicant_phone,
+            OwnerApplication.applicant_email,
+            OwnerApplication.relationship_type,
+            OwnerApplication.pg_name,
+            OwnerApplication.city,
+            OwnerApplication.area,
+            OwnerApplication.submitted_at,
+            OwnerApplication.status,
+            OwnerApplication.phone_verified,
+        )
+    )
     if search and search.strip():
         escaped = (
             search.strip()
@@ -275,6 +364,7 @@ def list_owner_applications(
             or_(
                 OwnerApplication.applicant_name.ilike(search_pattern, escape="\\"),
                 OwnerApplication.applicant_phone.ilike(search_pattern, escape="\\"),
+                OwnerApplication.applicant_email.ilike(search_pattern, escape="\\"),
                 OwnerApplication.application_reference.ilike(
                     search_pattern,
                     escape="\\",
@@ -421,6 +511,120 @@ def get_owner_application_detail(
             for item in history
         ],
         history_available=True,
+    )
+
+
+@router.delete(
+    "/{application_id}",
+    response_model=AdminOwnerApplicationDeletionResult,
+)
+def delete_owner_application(
+    application_id: str,
+    data: DeleteOwnerApplicationInput,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    application = (
+        db.query(OwnerApplication)
+        .filter(OwnerApplication.id == application_id)
+        .with_for_update()
+        .first()
+    )
+    if application is None:
+        raise _not_found()
+    if application.application_reference != data.application_reference.strip():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The confirmation reference does not match this application.",
+        )
+
+    owner = None
+    if application.owner_user_id:
+        owner = (
+            db.query(User)
+            .filter(User.id == application.owner_user_id)
+            .with_for_update()
+            .first()
+        )
+        if owner is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "The linked Owner account is missing. Resolve the account "
+                    "relationship before deleting this application."
+                ),
+            )
+        blocker = _owner_account_deletion_blocker(
+            db,
+            application=application,
+            owner=owner,
+            admin=admin,
+        )
+        if blocker:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=blocker,
+            )
+
+    try:
+        invitation_count = (
+            db.query(OwnerInvitation)
+            .filter(OwnerInvitation.application_id == application.id)
+            .delete(synchronize_session=False)
+        )
+        history_count = (
+            db.query(OwnerApplicationHistory)
+            .filter(OwnerApplicationHistory.application_id == application.id)
+            .delete(synchronize_session=False)
+        )
+        db.delete(application)
+        if owner is not None:
+            db.flush()
+            phone_numbers = {application.applicant_phone}
+            phone_numbers.add(
+                normalize_phone_number(application.applicant_phone)
+                .removeprefix("+91")
+            )
+            db.query(OtpVerification).filter(
+                func.lower(OtpVerification.phone_number).in_(
+                    {phone.casefold() for phone in phone_numbers}
+                )
+            ).delete(synchronize_session=False)
+            db.delete(owner)
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        logger.info(
+            "Owner application deletion blocked by dependent records "
+            "(application_id=%s, error_type=%s).",
+            application_id,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The application or linked Owner account has dependent "
+                "records that prevent safe deletion."
+            ),
+        ) from error
+    except SQLAlchemyError as error:
+        db.rollback()
+        logger.error(
+            "Owner application deletion failed (application_id=%s, error_type=%s).",
+            application_id,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The application could not be deleted. Please retry.",
+        ) from error
+
+    return AdminOwnerApplicationDeletionResult(
+        application_id=application_id,
+        application_reference=data.application_reference.strip(),
+        deleted_history_records=history_count,
+        deleted_invitation_records=invitation_count,
+        deleted_linked_owner_account=owner is not None,
     )
 
 
@@ -587,7 +791,6 @@ def create_owner_invitation(
     _commit_workflow_change(db)
     db.refresh(invitation)
 
-    
     try:
         send_owner_registration_invitation(
             recipient=application.applicant_email,

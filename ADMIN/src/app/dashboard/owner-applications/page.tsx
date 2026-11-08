@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import {
-  AdminConsoleShell,
   useAdminConsole,
 } from "@/components/AdminConsoleShell";
+import { DeleteOwnerApplicationDialog } from "@/components/DeleteOwnerApplicationDialog";
 import {
   ApiError,
+  deleteAdminOwnerApplication,
   getAdminOwnerApplicationStats,
   getAdminOwnerApplications,
   type AdminOwnerApplicationFilters,
@@ -55,6 +56,18 @@ const STAT_CARDS: {
   { key: "invitations_accepted", label: "Invitations accepted" },
 ];
 
+const STAT_FILTERS: Partial<
+  Record<keyof AdminOwnerApplicationStats, OwnerApplicationStatus>
+> = {
+  submitted: "SUBMITTED",
+  under_review: "UNDER_REVIEW",
+  additional_information_required: "ADDITIONAL_INFORMATION_REQUIRED",
+  approved: "APPROVED",
+  rejected: "REJECTED",
+  invitations_sent: "INVITATION_SENT",
+  invitations_accepted: "INVITATION_ACCEPTED",
+};
+
 function formatDate(value: string) {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime())
@@ -87,31 +100,89 @@ function StatusBadge({ value }: { value: OwnerApplicationStatus }) {
 }
 
 function OwnerApplicationsContent() {
-  const { token, signOut } = useAdminConsole();
+  const { token, signOut, getReviewViewState, saveReviewViewState } =
+    useAdminConsole();
   const [stats, setStats] = useState<AdminOwnerApplicationStats | null>(null);
   const [pageData, setPageData] = useState<AdminOwnerApplicationPage | null>(
     null
   );
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<OwnerApplicationStatus | "">("");
-  const [city, setCity] = useState("");
+  const [search, setSearch] = useState(
+    () => getReviewViewState().ownerApplications?.search ?? ""
+  );
+  const [debouncedSearch, setDebouncedSearch] = useState(
+    () => getReviewViewState().ownerApplications?.search ?? ""
+  );
+  const [status, setStatus] = useState<OwnerApplicationStatus | "">(
+    () => getReviewViewState().ownerApplications?.status ?? ""
+  );
+  const [city, setCity] = useState(
+    () => getReviewViewState().ownerApplications?.city ?? ""
+  );
   const [relationship, setRelationship] = useState<
     OwnerApplicationRelationship | ""
-  >("");
-  const [submittedFrom, setSubmittedFrom] = useState("");
-  const [submittedTo, setSubmittedTo] = useState("");
+  >(() => getReviewViewState().ownerApplications?.relationship ?? "");
+  const [submittedFrom, setSubmittedFrom] = useState(
+    () => getReviewViewState().ownerApplications?.submittedFrom ?? ""
+  );
+  const [submittedTo, setSubmittedTo] = useState(
+    () => getReviewViewState().ownerApplications?.submittedTo ?? ""
+  );
   const [sortBy, setSortBy] =
-    useState<AdminOwnerApplicationFilters["sort_by"]>("submitted_at");
+    useState<AdminOwnerApplicationFilters["sort_by"]>(
+      () => getReviewViewState().ownerApplications?.sortBy ?? "submitted_at"
+    );
   const [sortOrder, setSortOrder] =
-    useState<AdminOwnerApplicationFilters["sort_order"]>("desc");
-  const [page, setPage] = useState(1);
+    useState<AdminOwnerApplicationFilters["sort_order"]>(
+      () => getReviewViewState().ownerApplications?.sortOrder ?? "desc"
+    );
+  const [page, setPage] = useState(
+    () => getReviewViewState().ownerApplications?.page ?? 1
+  );
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingPage, setLoadingPage] = useState(true);
   const [error, setError] = useState("");
+  const [deleteCandidate, setDeleteCandidate] =
+    useState<AdminOwnerApplicationPage["items"][number] | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    saveReviewViewState({
+      ...getReviewViewState(),
+      ownerApplications: {
+        search,
+        status,
+        city,
+        relationship,
+        submittedFrom,
+        submittedTo,
+        sortBy: sortBy ?? "submitted_at",
+        sortOrder: sortOrder ?? "desc",
+        page,
+      },
+    });
+  }, [
+    city,
+    page,
+    relationship,
+    search,
+    getReviewViewState,
+    saveReviewViewState,
+    sortBy,
+    sortOrder,
+    status,
+    submittedFrom,
+    submittedTo,
+  ]);
 
   const filters = useMemo<AdminOwnerApplicationFilters>(
     () => ({
-      search: search.trim() || undefined,
+      search: debouncedSearch.trim() || undefined,
       status: status || undefined,
       city: city || undefined,
       relationship_type: relationship || undefined,
@@ -120,13 +191,13 @@ function OwnerApplicationsContent() {
       sort_by: sortBy,
       sort_order: sortOrder,
       page,
-      page_size: 20,
+      page_size: 10,
     }),
     [
       city,
       page,
       relationship,
-      search,
+      debouncedSearch,
       sortBy,
       sortOrder,
       status,
@@ -135,15 +206,17 @@ function OwnerApplicationsContent() {
     ]
   );
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (signal?: AbortSignal) => {
     if (!token) {
       signOut();
       return;
     }
     setLoadingStats(true);
     try {
-      setStats(await getAdminOwnerApplicationStats(token));
+      const result = await getAdminOwnerApplicationStats(token);
+      if (!signal?.aborted) setStats(result);
     } catch (loadError) {
+      if (signal?.aborted) return;
       if (
         loadError instanceof ApiError &&
         [401, 403].includes(loadError.status)
@@ -157,20 +230,21 @@ function OwnerApplicationsContent() {
           : "Unable to load application statistics."
       );
     } finally {
-      setLoadingStats(false);
+      if (!signal?.aborted) setLoadingStats(false);
     }
   }, [signOut, token]);
 
-  const loadApplications = useCallback(async () => {
+  const loadApplications = useCallback(async (signal?: AbortSignal) => {
     if (!token) {
       signOut();
       return;
     }
     setLoadingPage(true);
     try {
-      setPageData(await getAdminOwnerApplications(token, filters));
+      setPageData(await getAdminOwnerApplications(token, filters, signal));
       setError("");
     } catch (loadError) {
+      if (signal?.aborted) return;
       if (
         loadError instanceof ApiError &&
         [401, 403].includes(loadError.status)
@@ -184,17 +258,62 @@ function OwnerApplicationsContent() {
           : "Unable to load Owner applications."
       );
     } finally {
-      setLoadingPage(false);
+      if (!signal?.aborted) setLoadingPage(false);
     }
   }, [filters, signOut, token]);
 
   useEffect(() => {
-    void loadStats();
+    const controller = new AbortController();
+    void loadStats(controller.signal);
+    return () => controller.abort();
   }, [loadStats]);
 
   useEffect(() => {
-    void loadApplications();
+    const controller = new AbortController();
+    void loadApplications(controller.signal);
+    return () => controller.abort();
   }, [loadApplications]);
+
+  useEffect(() => {
+    if (pageData && !loadingPage && page > pageData.total_pages) {
+      setPage(Math.max(1, pageData.total_pages));
+    }
+  }, [loadingPage, page, pageData]);
+
+  async function deleteApplication() {
+    if (!deleteCandidate || deleteBusy) return;
+    if (!token) {
+      signOut();
+      return;
+    }
+
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await deleteAdminOwnerApplication(
+        token,
+        deleteCandidate.id,
+        deleteCandidate.application_reference
+      );
+      setDeleteCandidate(null);
+      await Promise.all([loadStats(), loadApplications()]);
+    } catch (deleteFailure) {
+      if (
+        deleteFailure instanceof ApiError &&
+        [401, 403].includes(deleteFailure.status)
+      ) {
+        signOut();
+        return;
+      }
+      setDeleteError(
+        deleteFailure instanceof Error
+          ? deleteFailure.message
+          : "The application could not be deleted."
+      );
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
 
   function clearFilters() {
     setSearch("");
@@ -237,9 +356,24 @@ function OwnerApplicationsContent() {
         className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
       >
         {STAT_CARDS.map(({ key, label }) => (
-          <div
-            className="rounded-2xl border border-line bg-white p-5 shadow-card"
+          <button
+            aria-pressed={
+              key === "total_applications"
+                ? !status
+                : STAT_FILTERS[key] === status
+            }
+            className={`rounded-2xl border bg-white p-5 text-left shadow-card transition hover:-translate-y-0.5 hover:border-brand/40 ${
+              (key === "total_applications" && !status) ||
+              STAT_FILTERS[key] === status
+                ? "border-brand ring-1 ring-brand/20"
+                : "border-line"
+            }`}
             key={key}
+            onClick={() => {
+              setStatus(STAT_FILTERS[key] ?? "");
+              setPage(1);
+            }}
+            type="button"
           >
             <p className="text-xs font-bold text-muted">{label}</p>
             <p className="mt-3 text-3xl font-extrabold text-ink">
@@ -252,7 +386,7 @@ function OwnerApplicationsContent() {
               )}
             </p>
             <p className="mt-1 text-xs text-muted">From the application database</p>
-          </div>
+          </button>
         ))}
       </section>
 
@@ -440,6 +574,15 @@ function OwnerApplicationsContent() {
           </div>
         ) : pageData?.items.length ? (
           <>
+            {loadingPage && (
+              <p
+                aria-live="polite"
+                className="border-b border-line bg-slate-50 px-4 py-2 text-xs font-semibold text-muted"
+                role="status"
+              >
+                Updating applications…
+              </p>
+            )}
             <div className="overflow-x-auto">
               <table className="min-w-[1180px] w-full border-collapse text-left text-sm">
                 <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-muted">
@@ -487,12 +630,24 @@ function OwnerApplicationsContent() {
                         <StatusBadge value={application.status} />
                       </td>
                       <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
                         <Link
                           className="whitespace-nowrap font-bold text-brand hover:underline"
                           href={`/dashboard/owner-applications/${encodeURIComponent(application.id)}`}
                         >
                           View details
                         </Link>
+                          <button
+                            className="whitespace-nowrap font-bold text-red-700 hover:underline"
+                            onClick={() => {
+                              setDeleteError("");
+                              setDeleteCandidate(application);
+                            }}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -501,8 +656,13 @@ function OwnerApplicationsContent() {
             </div>
             <div className="flex flex-col justify-between gap-3 border-t border-line px-4 py-4 text-xs text-muted sm:flex-row sm:items-center">
               <p>
-                {pageData.total} application{pageData.total === 1 ? "" : "s"} ·
-                Page {pageData.page} of {pageData.total_pages}
+                Showing{" "}
+                {pageData.total === 0
+                  ? 0
+                  : (pageData.page - 1) * pageData.page_size + 1}
+                –
+                {Math.min(pageData.page * pageData.page_size, pageData.total)} of{" "}
+                {pageData.total} applications
               </p>
               <div className="flex gap-2">
                 <button
@@ -513,6 +673,41 @@ function OwnerApplicationsContent() {
                 >
                   Previous
                 </button>
+                {Array.from(
+                  { length: pageData.total_pages },
+                  (_, index) => index + 1
+                )
+                  .filter(
+                    (pageNumber) =>
+                      pageNumber === 1 ||
+                      pageNumber === pageData.total_pages ||
+                      Math.abs(pageNumber - pageData.page) <= 1
+                  )
+                  .map((pageNumber, index, visiblePages) => (
+                    <span className="contents" key={pageNumber}>
+                      {index > 0 &&
+                        pageNumber - visiblePages[index - 1] > 1 && (
+                          <span className="px-1 py-2" aria-hidden="true">
+                            …
+                          </span>
+                        )}
+                      <button
+                        aria-current={
+                          pageNumber === pageData.page ? "page" : undefined
+                        }
+                        className={`min-w-9 rounded-lg border px-3 py-2 font-bold ${
+                          pageNumber === pageData.page
+                            ? "border-ink bg-ink text-white"
+                            : "border-line text-ink hover:bg-slate-50"
+                        }`}
+                        disabled={loadingPage}
+                        onClick={() => setPage(pageNumber)}
+                        type="button"
+                      >
+                        {pageNumber}
+                      </button>
+                    </span>
+                  ))}
                 <button
                   className="rounded-lg border border-line px-3 py-2 font-bold text-ink disabled:opacity-40"
                   disabled={pageData.page >= pageData.total_pages || loadingPage}
@@ -548,17 +743,24 @@ function OwnerApplicationsContent() {
           </div>
         )}
       </section>
+      {deleteCandidate && (
+        <DeleteOwnerApplicationDialog
+          application={deleteCandidate}
+          busy={deleteBusy}
+          error={deleteError}
+          onClose={() => {
+            if (!deleteBusy) {
+              setDeleteCandidate(null);
+              setDeleteError("");
+            }
+          }}
+          onConfirm={() => void deleteApplication()}
+        />
+      )}
     </>
   );
 }
 
 export default function OwnerApplicationsPage() {
-  return (
-    <AdminConsoleShell
-      activeSection="owner-applications"
-      title="Initial Request Review"
-    >
-      <OwnerApplicationsContent />
-    </AdminConsoleShell>
-  );
+  return <OwnerApplicationsContent />;
 }

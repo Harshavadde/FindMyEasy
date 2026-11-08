@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user
+from app.api.routes.auth import get_current_owner
+from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.image import ImageResponse, ImageType
@@ -23,7 +24,7 @@ async def upload_listing_image_raw(
     image_type: ImageType,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_owner),
 ):
     content_type = (
         request.headers.get(
@@ -40,7 +41,30 @@ async def upload_listing_image_raw(
         "photo.jpg",
     )
 
-    file_data = await request.body()
+    max_bytes = settings.MAX_IMAGE_SIZE_MB * 1024 * 1024
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Image size cannot exceed {settings.MAX_IMAGE_SIZE_MB} MB.",
+                )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid image content length.",
+            ) from error
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Image size cannot exceed {settings.MAX_IMAGE_SIZE_MB} MB.",
+            )
+        body.extend(chunk)
+    file_data = bytes(body)
 
     print("========== IMAGE UPLOAD ==========")
     print("Listing:", listing_id)

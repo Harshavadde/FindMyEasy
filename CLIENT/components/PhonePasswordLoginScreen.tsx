@@ -31,7 +31,7 @@ const COLORS = {
   border: "#CBD5E1",
 };
 
-type LoginMode = "user" | "owner" | "admin";
+type LoginMode = "user" | "owner";
 
 export default function PhonePasswordLoginScreen({
   mode,
@@ -67,23 +67,16 @@ export default function PhonePasswordLoginScreen({
         phone_number: phoneNumber,
         password,
       });
-      const expectedRole =
-        mode === "admin"
-          ? "ADMIN"
-          : mode === "owner"
-            ? "OWNER"
-            : "SEEKER";
+      const expectedRole = mode === "owner" ? "OWNER" : "SEEKER";
       if (result.user.user_role !== expectedRole) {
         await logoutUser();
         throw new Error(
-          mode === "admin"
-            ? "This account does not have administrator access."
-            : mode === "owner"
-              ? "This account does not have Owner access."
-              : "This account does not have User access."
+          mode === "owner"
+            ? "This account does not have Owner access."
+            : "This account does not have User access."
         );
       }
-      await completeLogin(result.user);
+      await completeLogin(result.user, mode);
     } catch (error) {
       Alert.alert(
         "Unable to sign in",
@@ -111,18 +104,12 @@ export default function PhonePasswordLoginScreen({
             </View>
             <Text style={styles.brand}>FindEasy</Text>
             <Text style={styles.title}>
-              {mode === "admin"
-                ? "Administrator sign in"
-                : mode === "owner"
-                  ? "Owner sign in"
-                  : "User sign in"}
+              {mode === "owner" ? "Owner sign in" : "User sign in"}
             </Text>
             <Text style={styles.subtitle}>
-              {mode === "admin"
-                ? "Sign in with an authorized FindEasy administrator account."
-                : mode === "owner"
-                  ? "Sign in with the phone number and password for your Owner account."
-                  : "Sign in with your phone number and password."}
+              {mode === "owner"
+                ? "Sign in with the phone number and password for your Owner account."
+                : "Sign in with your phone number and password."}
             </Text>
 
             <Text style={styles.label}>Phone number</Text>

@@ -28,6 +28,9 @@ from app.models.owner_application_workflow import (
     OwnerApplicationHistory,
     OwnerInvitation,
 )
+from app.models.favorite import Favorite
+from app.models.listing import Listing
+from app.models.otp_verification import OtpVerification
 from app.models.user import User
 
 
@@ -63,6 +66,9 @@ class AdminOwnerApplicationTests(unittest.TestCase):
         )
         self.send_invitation_email = self.email_delivery_patcher.start()
         with self.session_factory() as db:
+            db.query(Favorite).delete()
+            db.query(Listing).delete()
+            db.query(OtpVerification).delete()
             db.query(OwnerInvitation).delete()
             db.query(OwnerApplicationHistory).delete()
             db.query(OwnerApplication).delete()
@@ -88,6 +94,9 @@ class AdminOwnerApplicationTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.email_delivery_patcher.stop()
         with self.session_factory() as db:
+            db.query(Favorite).delete()
+            db.query(Listing).delete()
+            db.query(OtpVerification).delete()
             db.query(OwnerInvitation).delete()
             db.query(OwnerApplicationHistory).delete()
             db.query(OwnerApplication).delete()
@@ -179,6 +188,27 @@ class AdminOwnerApplicationTests(unittest.TestCase):
             )
             self.assertEqual(unauthorized.status_code, 403, path)
 
+        deletion = {
+            "application_reference": "FE-0000000000000001",
+        }
+        self.assertEqual(
+            self.client.request(
+                "DELETE",
+                "/api/v1/admin/owner-applications/missing-id",
+                json=deletion,
+            ).status_code,
+            401,
+        )
+        self.assertEqual(
+            self.client.request(
+                "DELETE",
+                "/api/v1/admin/owner-applications/missing-id",
+                json=deletion,
+                headers={"Authorization": f"Bearer {self.user_token}"},
+            ).status_code,
+            403,
+        )
+
     def test_stats_return_actual_counts_including_zero_future_statuses(self) -> None:
         self._create_application(
             applicant_name="Asha Rao",
@@ -246,6 +276,261 @@ class AdminOwnerApplicationTests(unittest.TestCase):
         self.assertEqual(result["items"][0]["applicant_name"], "Ravi Shah")
         self.assertCountEqual(result["cities"], ["Bengaluru", "Hyderabad"])
         self.assertNotIn("status_access_hash", result["items"][0])
+
+    def test_application_search_includes_email_and_page_size_is_capped_at_ten(
+        self,
+    ) -> None:
+        for index in range(12):
+            self._create_application(
+                applicant_name=f"Applicant {index}",
+                application_reference=f"FE-{index:016d}",
+                applicant_email=(
+                    "target-search@example.com" if index == 11 else None
+                ),
+            )
+
+        first_page = self.client.get(
+            "/api/v1/admin/owner-applications",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(first_page.status_code, 200, first_page.text)
+        self.assertEqual(first_page.json()["page_size"], 10)
+        self.assertEqual(len(first_page.json()["items"]), 10)
+        self.assertEqual(first_page.json()["total"], 12)
+
+        second_page = self.client.get(
+            "/api/v1/admin/owner-applications",
+            params={"page": 2, "page_size": 10},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(second_page.status_code, 200, second_page.text)
+        self.assertEqual(len(second_page.json()["items"]), 2)
+
+        oversized_page = self.client.get(
+            "/api/v1/admin/owner-applications",
+            params={"page_size": 11},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(oversized_page.status_code, 422)
+
+        email_search = self.client.get(
+            "/api/v1/admin/owner-applications",
+            params={"search": "target-search@example.com"},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(email_search.status_code, 200, email_search.text)
+        self.assertEqual(email_search.json()["total"], 1)
+        self.assertEqual(
+            email_search.json()["items"][0]["applicant_email"],
+            "target-search@example.com",
+        )
+
+    def test_delete_requires_reference_confirmation_and_removes_workflow_records(
+        self,
+    ) -> None:
+        application = self._create_application(
+            applicant_name="Asha Rao",
+            application_reference="FE-0000000000000001",
+        )
+        with self.session_factory() as db:
+            admin_id = (
+                db.query(User.id)
+                .filter(User.user_role == "ADMIN")
+                .scalar()
+            )
+            db.add(
+                OwnerApplicationHistory(
+                    application_id=application.id,
+                    previous_status=None,
+                    new_status="SUBMITTED",
+                    action="SUBMITTED",
+                    performed_by_admin_id=admin_id,
+                )
+            )
+            db.add(
+                OwnerInvitation(
+                    application_id=application.id,
+                    invited_phone=application.applicant_phone,
+                    token_hash=hashlib.sha256(b"delete-test-token").hexdigest(),
+                    expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                    created_by_admin_id=admin_id,
+                )
+            )
+            db.commit()
+
+        wrong_reference = self.client.request(
+            "DELETE",
+            f"/api/v1/admin/owner-applications/{application.id}",
+            json={"application_reference": "FE-WRONG"},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(wrong_reference.status_code, 409)
+
+        deleted = self.client.request(
+            "DELETE",
+            f"/api/v1/admin/owner-applications/{application.id}",
+            json={"application_reference": application.application_reference},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(deleted.status_code, 200, deleted.text)
+        self.assertEqual(deleted.json()["deleted_history_records"], 1)
+        self.assertEqual(deleted.json()["deleted_invitation_records"], 1)
+        self.assertFalse(deleted.json()["deleted_linked_owner_account"])
+        with self.session_factory() as db:
+            self.assertIsNone(db.get(OwnerApplication, application.id))
+            self.assertEqual(
+                db.query(OwnerApplicationHistory)
+                .filter_by(application_id=application.id)
+                .count(),
+                0,
+            )
+            self.assertEqual(
+                db.query(OwnerInvitation)
+                .filter_by(application_id=application.id)
+                .count(),
+                0,
+            )
+
+    def test_delete_removes_only_a_safe_linked_owner_and_releases_contacts(
+        self,
+    ) -> None:
+        application = self._create_application(
+            applicant_name="Asha Rao",
+            application_reference="FE-0000000000000001",
+            status_value="INVITATION_ACCEPTED",
+        )
+        registered_at = datetime.now(timezone.utc)
+        with self.session_factory() as db:
+            owner = User(
+                email=application.applicant_email,
+                phone_number=application.applicant_phone,
+                phone="9876543212",
+                password_hash=hash_password("owner-password-123"),
+                full_name=application.applicant_name,
+                user_role="OWNER",
+                is_phone_verified=True,
+                is_active=True,
+            )
+            db.add(owner)
+            db.flush()
+            owner_id = owner.id
+            db.query(OwnerApplication).filter_by(id=application.id).update(
+                {
+                    "owner_user_id": owner_id,
+                    "registration_completed_at": registered_at,
+                }
+            )
+            db.add(
+                OtpVerification(
+                    phone_number=application.applicant_phone,
+                    otp_hash="test-hash",
+                    attempts=0,
+                    expires_at=registered_at + timedelta(minutes=5),
+                    resend_available_at=registered_at,
+                )
+            )
+            db.commit()
+
+        response = self.client.request(
+            "DELETE",
+            f"/api/v1/admin/owner-applications/{application.id}",
+            json={"application_reference": application.application_reference},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["deleted_linked_owner_account"])
+        with self.session_factory() as db:
+            self.assertIsNone(db.get(User, owner_id))
+            self.assertEqual(
+                db.query(OtpVerification)
+                .filter_by(phone_number=application.applicant_phone)
+                .count(),
+                0,
+            )
+            replacement = User(
+                email=application.applicant_email,
+                phone_number=application.applicant_phone,
+                phone="9876543212",
+                password_hash=hash_password("replacement-password-123"),
+                full_name="Replacement Owner",
+                user_role="OWNER",
+            )
+            db.add(replacement)
+            db.commit()
+            self.assertIsNotNone(db.get(User, replacement.id))
+
+    def test_delete_blocks_owner_with_listings_or_mismatched_identity(self) -> None:
+        application = self._create_application(
+            applicant_name="Asha Rao",
+            application_reference="FE-0000000000000001",
+            status_value="INVITATION_ACCEPTED",
+        )
+        owner = User(
+            email="different@example.com",
+            phone_number=application.applicant_phone,
+            phone="9876543212",
+            password_hash=hash_password("owner-password-123"),
+            full_name="Asha Rao",
+            user_role="OWNER",
+            is_active=True,
+        )
+        with self.session_factory() as db:
+            db.add(owner)
+            db.flush()
+            owner_id = owner.id
+            db.query(OwnerApplication).filter_by(id=application.id).update(
+                {
+                    "owner_user_id": owner_id,
+                    "registration_completed_at": datetime.now(timezone.utc),
+                }
+            )
+            db.add(
+                Listing(
+                    owner_id=owner_id,
+                    owner_phone=application.applicant_phone,
+                    name="Independent PG",
+                    property_type="PG",
+                    gender="Co-living",
+                    monthly_price=10000,
+                    total_beds=1,
+                    available_beds=1,
+                    filled_beds=0,
+                    ac_type="Non-AC",
+                    facilities=[],
+                    city="Hyderabad",
+                    area="Madhapur",
+                    address="Independent address",
+                )
+            )
+            db.commit()
+
+        response = self.client.request(
+            "DELETE",
+            f"/api/v1/admin/owner-applications/{application.id}",
+            json={"application_reference": application.application_reference},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("contact details", response.json()["detail"])
+        with self.session_factory() as db:
+            saved_application = db.get(OwnerApplication, application.id)
+            self.assertIsNotNone(saved_application)
+            self.assertIsNotNone(db.get(User, owner_id))
+
+            saved_application.applicant_email = "different@example.com"
+            db.commit()
+
+        blocked_by_listing = self.client.request(
+            "DELETE",
+            f"/api/v1/admin/owner-applications/{application.id}",
+            json={"application_reference": application.application_reference},
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(blocked_by_listing.status_code, 409)
+        self.assertIn("listings", blocked_by_listing.json()["detail"])
+        with self.session_factory() as db:
+            self.assertIsNotNone(db.get(OwnerApplication, application.id))
+            self.assertIsNotNone(db.get(User, owner_id))
 
     def test_submitted_application_is_visible_to_admin(self) -> None:
         submission = self.client.post(

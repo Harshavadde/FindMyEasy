@@ -1,6 +1,10 @@
+
 import type { NextConfig } from "next";
 
-const apiOrigin = (process.env.FINDEASY_API_ORIGIN || "http://127.0.0.1:8000")
+const apiOrigin = (
+  process.env.FINDEASY_API_ORIGIN ||
+  "https://findeasy-api-10137192097.development.catalystappsail.com"
+)
   .trim()
   .replace(/\/+$/, "");
 

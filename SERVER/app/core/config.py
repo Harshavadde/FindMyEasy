@@ -1,4 +1,4 @@
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("JWT_SECRET_KEY", "AUTH_SECRET_KEY"),
     )
     AUTH_TOKEN_EXPIRE_MINUTES: int = 60
+    OTP_SECRET_SALT: str = ""
+    TWOFACTOR_API_KEY: str = ""
 
     ENVIRONMENT: str = "development"
     PHONE_OTP_ENABLED: bool = False
@@ -37,11 +39,23 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT_SECONDS: int = 30
     DB_CONNECT_TIMEOUT_SECONDS: int = 10
 
+    @model_validator(mode="after")
+    def disable_otp_in_production(self):
+        if self.ENVIRONMENT.lower() == "production":
+            self.PHONE_OTP_ENABLED = False
+        return self
+
     def cors_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.CORS_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
     )
+
+
 settings = Settings()

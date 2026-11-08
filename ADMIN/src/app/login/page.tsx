@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   getAdminSetupStatus,
   login,
+  normalizeIndianPhoneInput,
 } from "@/services/api";
 import { saveAdminToken } from "@/services/tokenStorage";
 
@@ -84,11 +85,12 @@ export default function AdminLoginPage() {
                 autoComplete="tel-national"
                 className="h-full min-w-0 flex-1 outline-none"
                 inputMode="numeric"
-                maxLength={10}
+                maxLength={18}
                 onChange={(event) =>
-                  setPhone(event.target.value.replace(/\D/g, "").slice(0, 10))
+                  setPhone(normalizeIndianPhoneInput(event.target.value))
                 }
                 placeholder="10-digit mobile number"
+                pattern="[6-9][0-9]{9}"
                 required
                 value={phone}
               />

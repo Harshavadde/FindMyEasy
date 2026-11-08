@@ -6,7 +6,8 @@ Login accepts either an email address or an Indian phone number with a
 password. Phone numbers are normalized to `+91XXXXXXXXXX`. Public
 email/password or phone/password registration creates a SEEKER account;
 OWNER accounts are created through the approved owner-invitation workflow,
-and ADMIN access is assigned only by trusted server-side provisioning.
+and ADMIN accounts are created by an authenticated existing ADMIN or trusted
+server-side provisioning.
 Passwords remain required; phone-only accounts without a password cannot
 authenticate until a secure recovery path is restored.
 
@@ -25,6 +26,24 @@ the current password-based signup/login experience. `OTP_SECRET_SALT` and
 re-enabled. There is no fixed development OTP.
 
 ## Database migration
+
+Admin listing rejection reasons are stored in the nullable
+`listings.rejection_reason` column. Before deploying the updated Admin API,
+apply [`migrations/listing_review_rejection_reason.sql`](./migrations/listing_review_rejection_reason.sql)
+to the Development database. This additive migration does not rewrite or
+remove existing listing data.
+
+Admin account creation and disabling are recorded in
+`admin_account_audit_log`. Before deploying those endpoints, apply
+[`migrations/admin_account_audit_log.sql`](./migrations/admin_account_audit_log.sql)
+to the Development database. It creates a new audit table and preserves all
+existing account and listing records.
+
+New listing images include a cached WebP preview. Before deploying the image
+upload update, apply
+[`migrations/listing_image_thumbnail.sql`](./migrations/listing_image_thumbnail.sql)
+to the Development database. Existing image URLs remain unchanged and continue
+to serve as the fallback when no preview is available.
 
 Review and, only when explicitly approved for the selected database, run
 [`migrations/phone_password_auth.sql`](./migrations/phone_password_auth.sql).

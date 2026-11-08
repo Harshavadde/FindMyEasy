@@ -142,7 +142,7 @@ class AuthCompatibilityTests(unittest.TestCase):
         self.assertTrue(stored_hash.startswith("$argon2id$"))
         self.assertTrue(verify_password("a-strong-password", stored_hash))
 
-    def test_bcrypt_legacy_login_rehashes_to_argon2(self) -> None:
+    def test_bcrypt_legacy_login_preserves_existing_hash(self) -> None:
         legacy_hash = BcryptHasher().hash("a-strong-password")
         user = self._create_user(password_hash=legacy_hash)
 
@@ -152,10 +152,10 @@ class AuthCompatibilityTests(unittest.TestCase):
         with self.session_factory() as session:
             stored_hash = session.query(User).one().password_hash
         assert isinstance(stored_hash, str)
-        self.assertTrue(stored_hash.startswith("$argon2id$"))
+        self.assertEqual(stored_hash, legacy_hash)
         self.assertTrue(verify_password("a-strong-password", stored_hash))
 
-    def test_historical_scrypt_login_rehashes_to_argon2(self) -> None:
+    def test_historical_scrypt_login_preserves_existing_hash(self) -> None:
         legacy_hash = _legacy_scrypt_hash("a-strong-password")
         user = self._create_user(password_hash=legacy_hash)
 
@@ -165,7 +165,7 @@ class AuthCompatibilityTests(unittest.TestCase):
         with self.session_factory() as session:
             stored_hash = session.query(User).one().password_hash
         assert isinstance(stored_hash, str)
-        self.assertTrue(stored_hash.startswith("$argon2id$"))
+        self.assertEqual(stored_hash, legacy_hash)
         self.assertTrue(verify_password("a-strong-password", stored_hash))
 
     def test_historical_scrypt_hash_rejects_wrong_password_and_bad_parameters(

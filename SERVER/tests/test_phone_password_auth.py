@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.routes.auth import router as auth_router
 from app.api.routes.favorites import router as favorites_router
 from app.core.config import Settings, settings
+from app.core.security import hash_password
 from app.db.database import Base, get_db
 from app.models.favorite import Favorite
 from app.models.hostel_member import HostelMember
@@ -258,6 +259,82 @@ class PhonePasswordAuthTests(unittest.TestCase):
             abs((actual_expiration - expected_expiration).total_seconds()),
             2,
         )
+
+    def test_existing_seeker_and_owner_login_and_me_preserve_credentials(self) -> None:
+        accounts = (
+            {
+                "phone_number": "+919876543210",
+                "phone": "9876543210",
+                "login_phone": "9876543210",
+                "role": "SEEKER",
+                "password": "existing-seeker-password",
+            },
+            {
+                "phone_number": "9876543211",
+                "phone": "9876543211",
+                "login_phone": "+919876543211",
+                "role": "OWNER",
+                "password": "existing-owner-password",
+            },
+        )
+        original_accounts: dict[str, tuple[str, str]] = {}
+
+        with self.session_factory() as session:
+            for account in accounts:
+                user = User(
+                    phone_number=account["phone_number"],
+                    phone=account["phone"],
+                    password_hash=hash_password(account["password"]),
+                    full_name=f"Existing {account['role']}",
+                    user_role=account["role"],
+                    is_phone_verified=True,
+                )
+                session.add(user)
+                session.flush()
+                original_accounts[account["role"]] = (
+                    user.id,
+                    user.password_hash,
+                )
+            session.commit()
+
+        for account in accounts:
+            with self.subTest(role=account["role"]):
+                login = self.client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "phone_number": account["login_phone"],
+                        "password": account["password"],
+                    },
+                )
+
+                self.assertEqual(login.status_code, 200, login.text)
+                response_user = login.json()["user"]
+                user_id, original_hash = original_accounts[account["role"]]
+                self.assertEqual(response_user["id"], user_id)
+                self.assertEqual(response_user["user_role"], account["role"])
+
+                access_token = login.json()["access_token"]
+                claims = jwt.decode(
+                    access_token,
+                    settings.JWT_SECRET_KEY,
+                    algorithms=["HS256"],
+                )
+                self.assertEqual(claims["sub"], user_id)
+
+                current_user = self.client.get(
+                    "/api/v1/auth/me",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                self.assertEqual(current_user.status_code, 200, current_user.text)
+                self.assertEqual(current_user.json()["id"], user_id)
+                self.assertEqual(current_user.json()["user_role"], account["role"])
+
+                with self.session_factory() as session:
+                    stored_user = session.query(User).filter_by(id=user_id).one()
+                    self.assertEqual(stored_user.password_hash, original_hash)
+
+        with self.session_factory() as session:
+            self.assertEqual(session.query(User).count(), len(accounts))
 
     def test_unauthenticated_me_rejected_and_authenticated_unverified_user_allowed(
         self,

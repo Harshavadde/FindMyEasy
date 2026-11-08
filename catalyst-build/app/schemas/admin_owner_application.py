@@ -75,3 +75,11 @@ class AdminOwnerApplicationDetail(AdminOwnerApplicationSummary):
     last_updated_at: datetime | None = None
     status_history: list[OwnerApplicationHistoryItem] = Field(default_factory=list)
     history_available: bool = False
+
+
+class AdminOwnerApplicationDeletionResult(BaseModel):
+    application_id: str
+    application_reference: str
+    deleted_history_records: int
+    deleted_invitation_records: int
+    deleted_linked_owner_account: bool

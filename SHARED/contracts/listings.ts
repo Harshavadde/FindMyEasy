@@ -1,8 +1,9 @@
 export type ListingImageContract = {
   id: string;
   image_type: string;
-  url: string | null;
+  url?: string | null;
   image_url?: string | null;
+  thumbnail_url?: string | null;
   original_filename?: string | null;
 };
 
@@ -25,4 +26,53 @@ export type AdminListingContract = {
   status: string;
   facilities: string[];
   images: ListingImageContract[];
+  sharing: {
+    id: string;
+    sharing_type: string;
+    ac_type: string;
+    floor: string | null;
+    monthly_price: number;
+    total_beds: number;
+    available_beds: number;
+    filled_beds: number;
+  }[];
+  security_deposit: number | null;
+  ac_type: string;
+  food_available: string;
+  food_type: string | null;
+  breakfast_start_time: string | null;
+  breakfast_end_time: string | null;
+  lunch_start_time: string | null;
+  lunch_end_time: string | null;
+  dinner_start_time: string | null;
+  dinner_end_time: string | null;
+  restrictions: string | null;
+  owner_name: string | null;
+  owner_email: string | null;
+  owner_user_role: string | null;
+  owner_is_active: boolean | null;
+  created_at: string;
+  updated_at: string;
+  rejection_reason: string | null;
+};
+
+export type AdminListingSummaryContract = {
+  id: string;
+  name: string;
+  property_type: string;
+  gender: string;
+  monthly_price: number;
+  total_beds: number;
+  available_beds: number;
+  filled_beds: number;
+  city: string | null;
+  area: string | null;
+  owner_phone: string | null;
+  status: string;
+  preview_image_url: string | null;
+  owner_name: string | null;
+  owner_email: string | null;
+  created_at: string;
+  updated_at: string;
+  rejection_reason: string | null;
 };

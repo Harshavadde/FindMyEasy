@@ -190,6 +190,15 @@ def register_owner_from_invitation(
             )
 
         phone_number = application.applicant_phone
+        if not application.applicant_email:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This application has no registered email address. "
+                    "Contact FindEasy support for assistance."
+                ),
+            )
         national_number = phone_number.removeprefix("+91")
         existing_account_query = db.query(User.id).filter(
             or_(
