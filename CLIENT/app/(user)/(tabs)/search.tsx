@@ -11,12 +11,12 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { router } from "expo-router";
 
 import ListingCard from "../../../components/ListingCard";
+import VoiceSearchButton from "../../../components/VoiceSearchButton";
 import { getPublicListings } from "../../../services/api";
 import type { Listing } from "../../../types/listing";
 
@@ -207,40 +207,6 @@ export default function UserSearch() {
               Find PGs and hostels by name, area, city, or address.
             </Text>
 
-            <Pressable
-              onPress={() => {
-                Keyboard.dismiss();
-                router.push({
-                  pathname: "/(user)/PG",
-                  params: { filterMode: "new" },
-                });
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Find PG using city, area, room, and facility preferences"
-              className="mt-4 flex-row items-center justify-between rounded-[18px] bg-[#2563EB] p-4"
-            >
-              <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-[#FFFFFF26]">
-                <MaterialCommunityIcons
-                  name="tune-variant"
-                  size={21}
-                  color="#FFFFFF"
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="text-[15px] font-extrabold text-white">
-                  Find PG
-                </Text>
-                <Text className="mt-1 text-[11px] text-[#DBEAFE]">
-                  Choose city, area, sharing and AC preferences
-                </Text>
-              </View>
-              <MaterialCommunityIcons
-                name="arrow-right"
-                size={20}
-                color="#FFFFFF"
-              />
-            </Pressable>
-
             <View
               className={`mt-4 flex-row items-center rounded-[18px] bg-white px-4 ${
                 searchFocused
@@ -277,6 +243,7 @@ export default function UserSearch() {
                 className="flex-1 text-[15px] text-[#0F172A]"
                 style={{ minHeight: 54 }}
               />
+              <VoiceSearchButton onTranscriptChange={setQuery} />
               {query.length > 0 && (
                 <Pressable
                   onPress={() => {

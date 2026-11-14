@@ -160,6 +160,7 @@ export default function NearbyPGsScreen() {
     useState<LocationCoordinate | null>(selectedLocation);
   const [needsLocationChoice, setNeedsLocationChoice] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [proximityLoading, setProximityLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadNearbyPGs = useCallback(async () => {
@@ -167,6 +168,8 @@ export default function NearbyPGsScreen() {
     setError(null);
     setCoordinates(null);
     setListings([]);
+    setProximityBadges({});
+    setProximityLoading(false);
 
     const listingsPromise = getPublicListings()
       .then((availableListings) => {
@@ -182,6 +185,30 @@ export default function NearbyPGsScreen() {
         );
         return null;
       });
+
+    const updatePlaceProximity = (
+      candidateListings: Listing[],
+      proximityType: ListingProximityBadge["type"]
+    ) => {
+      setProximityBadges(
+        getCuratedListingProximity(
+          candidateListings,
+          proximityType,
+          typeof placeNameParam === "string" ? placeNameParam : undefined
+        )
+      );
+      setProximityLoading(true);
+      void getPublicListingProximity(
+        candidateListings,
+        proximityType,
+        typeof placeNameParam === "string" ? placeNameParam : undefined
+      )
+        .then(setProximityBadges)
+        .catch((proximityError: unknown) => {
+          console.warn("Unable to load public nearby-place data:", proximityError);
+        })
+        .finally(() => setProximityLoading(false));
+    };
 
     try {
         const resultMode =
@@ -250,19 +277,11 @@ export default function NearbyPGsScreen() {
                 : resultFilterParam === "coaching"
                   ? "education"
                   : "landmark";
-            setProximityBadges(
-              getCuratedListingProximity(
-                availableListings,
-                proximityType,
-                typeof placeNameParam === "string" ? placeNameParam : undefined
-              )
-            );
-            setProximityBadges(
-              await getPublicListingProximity(
-                availableListings,
-                proximityType,
-                typeof placeNameParam === "string" ? placeNameParam : undefined
-              )
+            updatePlaceProximity(
+              scopedListings.filter(
+                (listing) => listing.property_type.trim().toLowerCase() === "pg"
+              ),
+              proximityType
             );
           }
           return;
@@ -300,6 +319,8 @@ export default function NearbyPGsScreen() {
       const [availableListings] = await Promise.all([
         listingsPromise,
         (async () => {
+          if (resultMode === "place") return;
+
           try {
             const [address] =
               await Location.reverseGeocodeAsync(currentCoordinates);
@@ -344,6 +365,7 @@ export default function NearbyPGsScreen() {
         }
         setNeedsLocationChoice(false);
         if (resultMode === "place") {
+          setLocationLabel(selectedLocationLabel);
           const proximityType =
             resultFilterParam === "metro"
               ? "metro"
@@ -352,19 +374,23 @@ export default function NearbyPGsScreen() {
               : resultFilterParam === "coaching"
                 ? "education"
                 : "landmark";
-          setProximityBadges(
-            getCuratedListingProximity(
-              availableListings,
-              proximityType,
-              typeof placeNameParam === "string" ? placeNameParam : undefined
-            )
-          );
-          setProximityBadges(
-            await getPublicListingProximity(
-              availableListings,
-              proximityType,
-              typeof placeNameParam === "string" ? placeNameParam : undefined
-            )
+          const proximityListings = availableListings.filter((listing) => {
+            if (listing.property_type.trim().toLowerCase() !== "pg") return false;
+            const latitude = Number(listing.latitude);
+            const longitude = Number(listing.longitude);
+            return (
+              Number.isFinite(latitude) &&
+              Number.isFinite(longitude) &&
+              latitude >= -90 &&
+              latitude <= 90 &&
+              longitude >= -180 &&
+              longitude <= 180 &&
+              getDistanceKm(anchor, { latitude, longitude }) <= MAX_DISTANCE_KM
+            );
+          });
+          updatePlaceProximity(
+            proximityListings,
+            proximityType
           );
         }
         return;
@@ -775,6 +801,13 @@ export default function NearbyPGsScreen() {
                 Try again
               </Text>
             </Pressable>
+          </View>
+        ) : nearbyPGs.length === 0 && resultMode === "place" && proximityLoading ? (
+          <View className="flex-1 items-center justify-center py-16">
+            <ActivityIndicator size="small" color="#2563EB" />
+            <Text className="mt-3 text-[12px] text-[#64748B]">
+              Checking nearby places...
+            </Text>
           </View>
         ) : nearbyPGs.length === 0 ? (
           <View className="flex-1 items-center justify-center rounded-[20px] bg-white px-6 py-12">

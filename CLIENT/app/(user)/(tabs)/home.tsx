@@ -33,6 +33,7 @@ import {
 } from "expo-router";
 
 import ListingCard from "../../../components/ListingCard";
+import VoiceSearchButton from "../../../components/VoiceSearchButton";
 import {
   getCuratedListingProximity,
   getPublicListingProximity,
@@ -1859,31 +1860,15 @@ export default function UserHome() {
 
       try {
         const liveLocation =
-          currentCoordinates ?? (await getCurrentLocation(true));
-        if (!liveLocation) return;
+          currentCoordinates ??
+          (browseLocation ? null : await getCurrentLocation(true));
+        if (!browseLocation && !liveLocation) return;
 
         const locationScope = getExploreLocationScope();
         let selectedLocation: Coordinates | null = browseLocation
           ? null
           : liveLocation;
         if (browseLocation) {
-          try {
-            const [geocodedLocation] = await Location.geocodeAsync(
-              `${browseLocation.name}, ${browseLocation.city}`
-            );
-            if (geocodedLocation) {
-              selectedLocation = {
-                latitude: geocodedLocation.latitude,
-                longitude: geocodedLocation.longitude,
-              };
-            }
-          } catch (error: unknown) {
-            console.warn(
-              "Unable to geocode selected nearby-results location:",
-              getErrorMessage(error, "Unknown")
-            );
-          }
-
           if (!selectedLocation) {
             const matchesSelectedLocation = listings.filter(
               (listing) =>
@@ -1943,8 +1928,8 @@ export default function UserHome() {
             selectedLongitude: selectedLocation
               ? String(selectedLocation.longitude)
               : "",
-            liveLatitude: String(liveLocation.latitude),
-            liveLongitude: String(liveLocation.longitude),
+            liveLatitude: liveLocation ? String(liveLocation.latitude) : "",
+            liveLongitude: liveLocation ? String(liveLocation.longitude) : "",
           },
         });
       } catch (error: unknown) {
@@ -3248,6 +3233,7 @@ export default function UserHome() {
               className="h-[44px] flex-1 px-2 text-[12px] text-[#0F172A]"
               accessibilityLabel="Search PG name, area or metro station"
             />
+            <VoiceSearchButton onTranscriptChange={handleSearchTextChange} />
             {searchText.length > 0 ? (
               <Pressable
                 onPress={handleClearSearch}
