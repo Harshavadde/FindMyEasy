@@ -1,4 +1,5 @@
 import {
+  createRef,
   useCallback,
   useEffect,
   useMemo,
@@ -8,6 +9,7 @@ import {
 import type { ComponentRef } from "react";
 
 import {
+  Animated,
   ActivityIndicator,
   Alert,
   Keyboard,
@@ -16,30 +18,49 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type TextInputInstance,
   type ScrollViewInstance,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { BlurTargetView, BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import * as Location from "expo-location";
 
 import {
   router,
+  useFocusEffect,
   useLocalSearchParams,
 } from "expo-router";
 
 import ListingCard from "../../../components/ListingCard";
-import VoiceSearchButton from "../../../components/VoiceSearchButton";
+import ExploreNeedCard from "../../../components/ExploreNeedCard";
+import {
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../../constants/userDesign";
+import { useBottomNavigationScroll } from "../../../contexts/BottomNavigationScrollContext";
 import {
   getCuratedListingProximity,
   getPublicListingProximity,
   getPublicListings,
   type ListingProximityBadge,
 } from "../../../services/api";
+import {
+  matchesAcType,
+  matchesArea,
+  matchesCity,
+  matchesPGType,
+  matchesRoomSharing,
+} from "../../../services/pgFilters";
 import type { Listing } from "../../../types/listing";
 
 /*
@@ -224,58 +245,52 @@ const PLACE_SHORTCUTS = [
 
 const EXPLORE_CATEGORIES = [
   {
-    icon: "🚇",
     label: "Near Metro",
     subtitle: "Within 500m",
     action: "place",
     filter: "metro",
-    background: "#EFF6FF",
-    border: "#DBEAFE",
+    image:
+      "https://img.staticmb.com/mbcontent/images/crop/uploads/ver2/XIwvQlc61t8ZIpanz4mAnzU3sha5qG-fNgySMXgHB5MvEA/hyderabad-metro-red-line_0_1200.jpg",
   },
   {
-    icon: "💻",
     label: "IT Parks",
     subtitle: "Hitech/Gachibowli",
     action: "place",
     filter: "it-park",
-    background: "#F5F3FF",
-    border: "#EDE9FE",
+    image:
+      "https://img.magnific.com/free-photo/plant-green-city-amazing-skyscraper_1122-1710.jpg?semt=ais_hybrid&w=740&q=80",
   },
   {
-    icon: "👦",
     label: "Boy's PG",
     subtitle: "Food Included",
     action: "gender",
     filter: "Boy's",
-    background: "#F0F9FF",
-    border: "#E0F2FE",
+    image:
+      "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?auto=format&fit=crop&w=800&q=85",
   },
   {
-    icon: "👧",
     label: "Girl's PG",
     subtitle: "24/7 Security",
     action: "gender",
     filter: "Girl's",
-    background: "#FDF2F8",
-    border: "#FCE7F3",
+    image:
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=800&q=85",
   },
   {
-    icon: "🏠",
     label: "Co-Living",
     subtitle: "Luxury Stays",
     action: "gender",
     filter: "Co-living",
-    background: "#ECFDF5",
-    border: "#D1FAE5",
+    image:
+      "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=800&q=85",
   },
   {
-    icon: "🎓",
     label: "Coaching Hub",
     subtitle: "Quiet Study Areas",
     action: "place",
     filter: "coaching",
-    background: "#FFFBEB",
-    border: "#FEF3C7",
+    image:
+      "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=800&q=85",
   },
 ] as const;
 
@@ -507,264 +522,6 @@ function formatDistance(
 
 /*
  * ============================================================================
- * PG TYPE MATCHING
- * ============================================================================
- *
- * PG.tsx uses:
- *
- * Boy's
- * Girl's
- * Co-living
- *
- * Existing Listing data uses:
- *
- * Boy's
- * Girl's
- * Co-living
- *
- * Therefore we translate the user selection
- * to the existing Listing gender value.
- */
-
-function matchesPGType(
-  listingGender: string,
-  selectedTypes: string[]
-): boolean {
-  /*
-   * If the user did not select PG Type,
-   * don't restrict the results.
-   */
-
-  if (
-    selectedTypes.length === 0
-  ) {
-    return true;
-  }
-
-  const gender =
-    normalizeText(listingGender);
-
-  return selectedTypes.some(
-    (type) => {
-      const selectedType =
-        normalizeText(type);
-
-      /*
-       * Boy's
-       * matches Boy's / Men / Boys
-       */
-
-      if (
-        selectedType ===
-        "Boy's"
-      ) {
-        return (
-          gender === "Boy's" ||
-          gender === "men" ||
-          gender === "boys"
-        );
-      }
-
-      /*
-       * Girl's
-       * matches Girl's / Women / Girls
-       */
-
-      if (
-        selectedType ===
-        "Girl's"
-      ) {
-        return (
-          gender === "Girl's" ||
-          gender === "women" ||
-          gender === "girls"
-        );
-      }
-
-      /*
-       * Co-living
-       */
-
-      if (
-        selectedType ===
-        "co-living"
-      ) {
-        return (
-          gender ===
-          "co-living"
-        );
-      }
-
-      /*
-       * Fallback
-       */
-
-      return (
-        gender ===
-        selectedType
-      );
-    }
-  );
-}
-
-/*
- * ============================================================================
- * ROOM SHARING MATCHING
- * ============================================================================
- *
- * User can select multiple sharing options.
- *
- * Example:
- *
- * User:
- * 2 Sharing
- * 3 Sharing
- *
- * Listing:
- * ["2 Sharing"]
- *
- * MATCH
- *
- * Listing:
- * ["4 Sharing"]
- *
- * NO MATCH
- */
-
-function normalizeSharing(
-  value: string
-): string {
-  return normalizeText(value)
-    .replace(
-      "single sharing",
-      "1 sharing"
-    )
-    .replace(
-      "single",
-      "1"
-    )
-    .replace(
-      "sharing",
-      ""
-    )
-    .replace(
-      /\s+/g,
-      ""
-    )
-    .trim();
-}
-
-function matchesRoomSharing(
-  listingSharing: Listing["sharing"],
-  selectedSharing: string[]
-): boolean {
-  // No sharing filter selected means allow all.
-  if (selectedSharing.length === 0) {
-    return true;
-  }
-
-  // Listing has no sharing data.
-  if (!Array.isArray(listingSharing)) {
-    return false;
-  }
-
-  // Extract sharing_type from each sharing object.
-  const listingValues = listingSharing.map((item) =>
-    normalizeSharing(String(item.sharing_type ?? ""))
-  );
-
-  // Match when any selected sharing type is available.
-  return selectedSharing.some((selected) =>
-    listingValues.includes(normalizeSharing(selected))
-  );
-}
-
-/*
- * ============================================================================
- * AC / NON-AC MATCHING
- * ============================================================================
- *
- * Single selection.
- */
-
-function matchesAcType(
-  listingAcType: string,
-  selectedAcTypes: string[]
-): boolean {
-  // No AC option selected means allow both AC and Non-AC.
-  if (selectedAcTypes.length === 0) {
-    return true;
-  }
-
-  // Match any selected AC option.
-  return selectedAcTypes.some(
-    (selectedType) =>
-      normalizeText(listingAcType) === normalizeText(selectedType)
-  );
-}
-
-/*
- * ============================================================================
- * CITY MATCHING
- * ============================================================================
- */
-
-function matchesCity(
-  listingCity: string,
-  selectedCity: string
-): boolean {
-  return (
-    normalizeText(
-      listingCity
-    ) ===
-    normalizeText(
-      selectedCity
-    )
-  );
-}
-
-/*
- * ============================================================================
- * AREA MATCHING
- * ============================================================================
- *
- * User can select multiple areas.
- *
- * Example:
- *
- * Madhapur
- * Gachibowli
- *
- * A listing in either area matches.
- */
-
-function matchesArea(
-  listingArea: string,
-  selectedAreas: string[]
-): boolean {
-  /*
-   * No area selected.
-   *
-   * Allow every area inside the selected city.
-   */
-
-  if (
-    selectedAreas.length === 0
-  ) {
-    return true;
-  }
-
-  return selectedAreas.some(
-    (area) =>
-      normalizeText(
-        listingArea
-      ) ===
-      normalizeText(area)
-  );
-}
-
-/*
- * ============================================================================
  * SMALL UI COMPONENT
  * ============================================================================
  */
@@ -845,6 +602,27 @@ function RowLabel({
  */
 
 export default function UserHome() {
+  const {
+    activateBlurTarget,
+    deactivateBlurTarget,
+    onScroll: handleBottomNavigationScroll,
+  } = useBottomNavigationScroll();
+  const screenBlurTarget = useRef<ComponentRef<typeof View> | null>(null);
+  const { width: screenWidth } = useWindowDimensions();
+  const carouselCardWidth = screenWidth * 0.8;
+  const carouselGap = 10;
+  const carouselSnapInterval = carouselCardWidth + carouselGap;
+  const carouselSidePadding = (screenWidth - carouselCardWidth) / 2;
+  const carouselScrollX = useRef(new Animated.Value(0)).current;
+  const carouselRef = useRef<ScrollViewInstance | null>(null);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      activateBlurTarget(screenBlurTarget);
+      return () => deactivateBlurTarget(screenBlurTarget);
+    }, [activateBlurTarget, deactivateBlurTarget])
+  );
 
   /*
    * ==========================================================================
@@ -1252,8 +1030,8 @@ export default function UserHome() {
       return;
     }
 
-    router.replace({
-      pathname: "/(user)/home",
+    router.push({
+      pathname: "/(user)/pg-results",
       params: {
         pgSearch: "true",
         propertyType: draftPropertyType,
@@ -2870,6 +2648,32 @@ export default function UserHome() {
       ]
     );
 
+  const carouselBlurTargets = useMemo(
+    () => results.map(() => createRef<ComponentRef<typeof View>>()),
+    [results]
+  );
+
+  useEffect(() => {
+    setCarouselIndex(0);
+    carouselScrollX.setValue(0);
+    carouselRef.current?.scrollTo({ x: 0, animated: false });
+  }, [carouselSnapInterval, carouselScrollX, results]);
+
+  const updateCarouselIndex = (offsetX: number) => {
+    const lastIndex = Math.max(0, results.length - 1);
+    const nextIndex = Math.max(
+      0,
+      Math.min(Math.round(offsetX / carouselSnapInterval), lastIndex)
+    );
+    setCarouselIndex((current) =>
+      current === nextIndex ? current : nextIndex
+    );
+  };
+  const firstVisibleDotIndex = Math.max(
+    0,
+    Math.min(carouselIndex - 3, results.length - 7)
+  );
+
   /*
    * ==========================================================================
    * DERIVED UI STATE
@@ -3129,7 +2933,12 @@ export default function UserHome() {
    */
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]" edges={["top"]}>
+    <BlurTargetView ref={screenBlurTarget} style={{ flex: 1 }}>
+      <SafeAreaView
+        className="flex-1"
+        style={{ backgroundColor: USER_SCREEN_BACKGROUND }}
+        edges={["top"]}
+      >
       <View className="border-b border-[#E2E8F0] bg-white px-4 pb-3 pt-2">
         <View className="flex-row items-center justify-between">
           <Pressable
@@ -3140,18 +2949,17 @@ export default function UserHome() {
             }. Tap to choose an area or city`}
             className="mr-3 flex-1 flex-row items-center"
           >
-            <View className="mr-2.5 h-10 w-10 items-center justify-center rounded-full bg-[#EFF6FF]">
-              <MaterialCommunityIcons
-                name="map-marker"
-                size={20}
-                color="#2563EB"
-              />
-            </View>
+            <MaterialCommunityIcons
+              name="navigation-variant"
+              size={22}
+              color="#2563EB"
+              style={{ marginRight: 10 }}
+            />
             <View className="flex-1">
               <View className="flex-row items-center">
                 <Text
                   numberOfLines={1}
-                  className="max-w-[220px] text-[13px] font-extrabold text-[#0F172A]"
+                  className="flex-shrink text-[15px] font-extrabold text-[#0F172A]"
                 >
                   {browseLocation?.name ??
                     (locationLoading
@@ -3160,13 +2968,13 @@ export default function UserHome() {
                 </Text>
                 <MaterialCommunityIcons
                   name="chevron-down"
-                  size={16}
+                  size={18}
                   color="#94A3B8"
                 />
               </View>
               <Text
                 numberOfLines={1}
-                className="mt-0.5 text-[10px] text-[#64748B]"
+                className="mt-0.5 text-[12px] text-[#64748B]"
               >
                 {browseLocation
                   ? browseLocation.city
@@ -3175,43 +2983,60 @@ export default function UserHome() {
             </View>
           </Pressable>
 
-          <Pressable
-            onPress={() =>
-              Alert.alert(
-                "Notifications",
-                "Listing notifications will appear here when available."
-              )
-            }
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
-            className="mr-2 h-10 w-10 items-center justify-center rounded-full bg-[#F1F5F9]"
-          >
-            <MaterialCommunityIcons
-              name="bell-outline"
-              size={19}
-              color="#475569"
-            />
-          </Pressable>
-          <Pressable
-            onPress={openPreferences}
-            accessibilityRole="button"
-            accessibilityLabel="Open search preferences"
-            className="h-10 w-10 items-center justify-center rounded-full bg-[#F1F5F9]"
-          >
-            <MaterialCommunityIcons
-              name="tune-variant"
-              size={19}
-              color="#475569"
-            />
-          </Pressable>
+          <View className="flex-row items-center">
+            <Pressable
+              onPress={openPreferences}
+              accessibilityRole="button"
+              accessibilityLabel="Open filters"
+              testID="home-filter-button"
+              className="mr-2 h-10 w-10 items-center justify-center rounded-full bg-[#F1F5F9]"
+            >
+              <MaterialCommunityIcons
+                name="tune-variant"
+                size={21}
+                color="#475569"
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push("/(user)/(tabs)/profile")}
+              accessibilityRole="button"
+              accessibilityLabel="Open profile"
+              testID="home-profile-button"
+              className="h-10 w-10 items-center justify-center rounded-full bg-[#F1F5F9]"
+            >
+              <MaterialCommunityIcons
+                name="account-circle-outline"
+                size={22}
+                color="#475569"
+              />
+            </Pressable>
+          </View>
         </View>
 
         <View className="mt-3 flex-row items-center">
-          <View className="flex-1 flex-row items-center rounded-[14px] bg-[#F1F5F9] px-3">
+          <View
+            style={{
+              flex: 1,
+              minHeight: 52,
+              paddingHorizontal: 14,
+              flexDirection: "row",
+              alignItems: "center",
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: "#E2E8F0",
+              backgroundColor: "#FFFFFF",
+              shadowColor: "#0F172A",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.04,
+              shadowRadius: 5,
+              elevation: 1,
+            }}
+          >
             <MaterialCommunityIcons
               name="magnify"
-              size={19}
-              color="#94A3B8"
+              size={20}
+              color="#64748B"
             />
             <TextInput
               ref={inputRef}
@@ -3219,8 +3044,8 @@ export default function UserHome() {
               onChangeText={handleSearchTextChange}
               onFocus={handleSearchFocus}
               onBlur={handleSearchBlur}
-              placeholder="Search PG name, area or metro station..."
-              placeholderTextColor="#94A3B8"
+              placeholder="Search PGs, areas or metro stations"
+              placeholderTextColor="#6B7280"
               returnKeyType="search"
               onSubmitEditing={() =>
                 openSearchResults(
@@ -3230,10 +3055,9 @@ export default function UserHome() {
                     : "search"
                 )
               }
-              className="h-[44px] flex-1 px-2 text-[12px] text-[#0F172A]"
+              className="h-[50px] flex-1 px-2 text-[14px] text-[#0F172A]"
               accessibilityLabel="Search PG name, area or metro station"
             />
-            <VoiceSearchButton onTranscriptChange={handleSearchTextChange} />
             {searchText.length > 0 ? (
               <Pressable
                 onPress={handleClearSearch}
@@ -3307,6 +3131,10 @@ export default function UserHome() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        scrollEventThrottle={16}
+        onScroll={(event) =>
+          handleBottomNavigationScroll(event.nativeEvent.contentOffset.y)
+        }
         onScrollBeginDrag={() => {
           Keyboard.dismiss();
           setSearchFocused(false);
@@ -3320,7 +3148,7 @@ export default function UserHome() {
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 16,
-          paddingBottom: 28,
+          paddingBottom: 140,
         }}
       >
         <View className="overflow-hidden rounded-[20px] bg-[#2563EB] p-4">
@@ -3366,25 +3194,28 @@ export default function UserHome() {
         </View>
 
         <View className="mt-6">
-          <View className="mb-2.5 flex-row items-center justify-between">
+          <View className="mb-2.5">
             <Text className="text-[13px] font-extrabold uppercase text-[#0F172A]">
               Explore by needs
             </Text>
-            <Pressable
-              onPress={openPreferences}
-              accessibilityRole="button"
-              accessibilityLabel="View all search preferences"
-            >
-              <Text className="text-[12px] font-bold text-[#2563EB]">
-                View All
-              </Text>
-            </Pressable>
           </View>
 
-          <View className="flex-row flex-wrap justify-between">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginHorizontal: -16 }}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingBottom: 8,
+            }}
+          >
             {EXPLORE_CATEGORIES.map((category) => (
-              <Pressable
+              <ExploreNeedCard
                 key={category.label}
+                label={category.label}
+                subtitle={category.subtitle}
+                imageUrl={category.image}
+                accessibilityLabel={`${category.label}: ${category.subtitle}`}
                 onPress={() => {
                   if (category.action === "place") {
                     void handleNearbyPlaceSearch(category.filter);
@@ -3392,38 +3223,16 @@ export default function UserHome() {
                     handleGenderCategory(category.filter);
                   }
                 }}
-                accessibilityRole="button"
-                accessibilityLabel={`${category.label}: ${category.subtitle}`}
-                className="mb-2.5 items-center justify-center rounded-[20px] border px-2"
-                style={{
-                  width: "31.8%",
-                  height: 134,
-                  backgroundColor: category.background,
-                  borderColor: category.border,
-                }}
-              >
-                <View className="mb-2 h-10 w-10 items-center justify-center rounded-[14px] bg-white">
-                  <Text className="text-[19px]">{category.icon}</Text>
-                </View>
-                <Text
-                  numberOfLines={1}
-                  className="text-center text-[12px] font-bold text-[#0F172A]"
-                >
-                  {category.label}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  className="mt-2 text-center text-[10px] text-[#94A3B8]"
-                >
-                  {category.subtitle}
-                </Text>
-              </Pressable>
+              />
             ))}
-          </View>
+          </ScrollView>
         </View>
 
         {isPGSearch && pgFilters ? (
-          <View className="mb-4 mt-2 rounded-[16px] border border-[#DBEAFE] bg-white p-3.5">
+          <View
+            className="mb-4 mt-2 rounded-[16px] border border-[#DBEAFE] bg-white p-3.5"
+            style={USER_SOFT_SHADOW}
+          >
             <View className="flex-row items-center justify-between">
               <View className="flex-1 pr-3">
                 <Text className="text-[10px] font-extrabold text-[#2563EB]">
@@ -3553,27 +3362,194 @@ export default function UserHome() {
               )}
             </View>
           ) : (
-            results.map(({ listing, distance }) => (
-              <View key={listing.id} style={{ paddingBottom: 12 }}>
-                {isNearby && distance !== null && (
-                  <Text className="mb-1.5 ml-1 text-[11px] font-bold text-[#2563EB]">
-                    📍 {formatDistance(distance)}
-                  </Text>
-                )}
-                <ListingCard
-                  listing={listing}
-                  imageHeight={260}
-                  elevated
-                  proximityBadge={proximityBadges[listing.id] ?? null}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/(user)/listing/[id]",
-                      params: { id: String(listing.id) },
-                    })
+            <View>
+              <View style={{ marginHorizontal: -16, position: "relative" }}>
+                <Animated.ScrollView
+                  ref={carouselRef}
+                  horizontal
+                  nestedScrollEnabled
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{
+                    paddingHorizontal: carouselSidePadding,
+                    paddingVertical: 14,
+                  }}
+                  snapToInterval={carouselSnapInterval}
+                  snapToAlignment="start"
+                  decelerationRate="fast"
+                  scrollEventThrottle={16}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: carouselScrollX } } }],
+                    {
+                      useNativeDriver: true,
+                      listener: (
+                        event: NativeSyntheticEvent<NativeScrollEvent>
+                      ) =>
+                        updateCarouselIndex(
+                          event.nativeEvent.contentOffset.x
+                        ),
+                    }
+                  )}
+                  onMomentumScrollEnd={(event) =>
+                    updateCarouselIndex(event.nativeEvent.contentOffset.x)
                   }
+                  onScrollEndDrag={(event) =>
+                    updateCarouselIndex(event.nativeEvent.contentOffset.x)
+                  }
+                >
+                  {results.map(({ listing, distance }, index) => {
+                    const inputRange = [
+                      (index - 1) * carouselSnapInterval,
+                      index * carouselSnapInterval,
+                      (index + 1) * carouselSnapInterval,
+                    ];
+                    const scale = carouselScrollX.interpolate({
+                      inputRange,
+                      outputRange: [0.9, 1, 0.9],
+                      extrapolate: "clamp",
+                    });
+                    const opacity = carouselScrollX.interpolate({
+                      inputRange,
+                      outputRange: [0.58, 1, 0.58],
+                      extrapolate: "clamp",
+                    });
+                    const blurOpacity = carouselScrollX.interpolate({
+                      inputRange,
+                      outputRange: [0.4, 0, 0.4],
+                      extrapolate: "clamp",
+                    });
+                    const rotation = carouselScrollX.interpolate({
+                      inputRange,
+                      outputRange: ["14deg", "0deg", "-14deg"],
+                      extrapolate: "clamp",
+                    });
+                    const translateY = carouselScrollX.interpolate({
+                      inputRange,
+                      outputRange: [8, 0, 8],
+                      extrapolate: "clamp",
+                    });
+
+                    return (
+                      <Animated.View
+                        key={listing.id}
+                        style={{
+                          width: carouselCardWidth,
+                          marginRight:
+                            index < results.length - 1 ? carouselGap : 0,
+                          opacity,
+                          transform: [
+                            { perspective: 1000 },
+                            { rotateY: rotation },
+                            { scale },
+                            { translateY },
+                          ],
+                        }}
+                      >
+                        <BlurTargetView
+                          ref={carouselBlurTargets[index]}
+                          style={{ width: "100%" }}
+                        >
+                          {isNearby && distance !== null && (
+                            <Text className="mb-1.5 ml-1 text-[11px] font-bold text-[#2563EB]">
+                              📍 {formatDistance(distance)}
+                            </Text>
+                          )}
+                          <ListingCard
+                            listing={listing}
+                            imageHeight={220}
+                            focused={index === carouselIndex}
+                            proximityBadge={
+                              proximityBadges[listing.id] ?? null
+                            }
+                            onPress={() =>
+                              router.push({
+                                pathname: "/(user)/listing/[id]",
+                                params: { id: String(listing.id) },
+                              })
+                            }
+                          />
+                        </BlurTargetView>
+                        {Math.abs(index - carouselIndex) === 1 ? (
+                          <Animated.View
+                            pointerEvents="none"
+                            style={[
+                              StyleSheet.absoluteFill,
+                              { opacity: blurOpacity },
+                            ]}
+                          >
+                            <BlurView
+                              blurTarget={carouselBlurTargets[index]}
+                              blurMethod="dimezisBlurViewSdk31Plus"
+                              intensity={14}
+                              tint="light"
+                              style={[
+                                StyleSheet.absoluteFill,
+                                { borderRadius: 20 },
+                              ]}
+                            />
+                          </Animated.View>
+                        ) : null}
+                      </Animated.View>
+                    );
+                  })}
+                </Animated.ScrollView>
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={[USER_SCREEN_BACKGROUND, "rgba(245,248,253,0)"]}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    width: 12,
+                  }}
+                />
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={["rgba(245,248,253,0)", USER_SCREEN_BACKGROUND]}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    width: 12,
+                  }}
                 />
               </View>
-            ))
+              {results.length > 1 ? (
+                <View className="mt-1 flex-row items-center justify-center">
+                  {results
+                    .slice(firstVisibleDotIndex, firstVisibleDotIndex + 7)
+                    .map((result, dotIndex) => {
+                      const index = firstVisibleDotIndex + dotIndex;
+
+                      return (
+                        <Pressable
+                          key={result.listing.id}
+                          onPress={() => {
+                            setCarouselIndex(index);
+                            carouselRef.current?.scrollTo({
+                              x: index * carouselSnapInterval,
+                              animated: true,
+                            });
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Show stay ${index + 1} of ${results.length}`}
+                          hitSlop={6}
+                          className="items-center justify-center px-1.5 py-2"
+                        >
+                          <View
+                            className={`h-1.5 rounded-full ${
+                              index === carouselIndex
+                                ? "w-5 bg-[#2563EB]"
+                                : "w-1.5 bg-[#CBD5E1]"
+                            }`}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                </View>
+              ) : null}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -3968,6 +3944,7 @@ export default function UserHome() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </BlurTargetView>
   );
 }

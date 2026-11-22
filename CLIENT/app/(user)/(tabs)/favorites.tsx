@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+} from "react";
 import {
   Alert,
   ActivityIndicator,
@@ -9,14 +15,27 @@ import {
   View,
   Pressable,
 } from "react-native";
+import { BlurTargetView } from "expo-blur";
 import { useFocusEffect, useRouter } from "expo-router";
 import ListingCard from "../../../components/ListingCard";
 import { getFavoriteListings } from "../../../services/favorites";
 import type { Listing } from "../../../types/listing";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFavoritesStore } from "../../../store/favoritesStore";
+import { useBottomNavigationScroll } from "../../../contexts/BottomNavigationScrollContext";
+import {
+  USER_CARD_BORDER,
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../../constants/userDesign";
 
 export default function FavoritesScreen() {
+  const {
+    activateBlurTarget,
+    deactivateBlurTarget,
+    onScroll: handleBottomNavigationScroll,
+  } = useBottomNavigationScroll();
+  const screenBlurTarget = useRef<ComponentRef<typeof View> | null>(null);
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -81,6 +100,13 @@ export default function FavoritesScreen() {
     }, [loadFavorites])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      activateBlurTarget(screenBlurTarget);
+      return () => deactivateBlurTarget(screenBlurTarget);
+    }, [activateBlurTarget, deactivateBlurTarget])
+  );
+
   const openListing = (listing: Listing) => {
     router.push({
       pathname: "/(user)/listing/[id]",
@@ -104,10 +130,8 @@ export default function FavoritesScreen() {
   };
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={["top"]}
-    >
+    <BlurTargetView ref={screenBlurTarget} style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.title}>My Favorites</Text>
       <Text style={styles.subtitle}>
         PGs and hostels you have saved
@@ -143,6 +167,10 @@ export default function FavoritesScreen() {
         <FlatList
           data={favorites}
           keyExtractor={(item) => item.id}
+          scrollEventThrottle={16}
+          onScroll={(event) =>
+            handleBottomNavigationScroll(event.nativeEvent.contentOffset.y)
+          }
           renderItem={({ item }) => (
             <ListingCard
               listing={item}
@@ -184,14 +212,15 @@ export default function FavoritesScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </BlurTargetView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: USER_SCREEN_BACKGROUND,
     paddingTop: 18,
   },
   title: {
@@ -209,7 +238,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 12,
-    paddingBottom: 24,
+    paddingBottom: 140,
   },
   center: {
     flex: 1,
@@ -221,6 +250,9 @@ const styles = StyleSheet.create({
     fontSize: 58,
     color: "#2563EB",
     marginBottom: 10,
+    textShadowColor: "#BFDBFE",
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
   },
   emptyTitle: {
     fontSize: 19,
@@ -246,6 +278,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 11,
     borderRadius: 8,
+    ...USER_SOFT_SHADOW,
   },
   retryText: {
     color: "#FFFFFF",
@@ -264,6 +297,9 @@ const styles = StyleSheet.create({
     padding: 22,
     borderRadius: 18,
     backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: USER_CARD_BORDER,
+    ...USER_SOFT_SHADOW,
   },
   confirmationTitle: {
     color: "#0F172A",

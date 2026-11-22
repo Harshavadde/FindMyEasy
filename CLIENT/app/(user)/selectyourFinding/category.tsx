@@ -2,10 +2,17 @@ import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import {
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../../constants/userDesign";
 
 export default function Category() {
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: USER_SCREEN_BACKGROUND }}
+    >
 
       {/* Header */}
       <View className="flex-row items-center justify-between px-5 pt-4">
@@ -14,7 +21,7 @@ export default function Category() {
         </Text>
 
         <Pressable
-          onPress={() => router.push("/(user)/profile")}
+          onPress={() => router.push("/(user)/(tabs)/profile")}
           className="h-11 w-11 items-center justify-center rounded-full bg-[#E8F1FF]"
         >
           <MaterialCommunityIcons
@@ -43,8 +50,12 @@ export default function Category() {
           <Pressable
             onPress={() => router.push("/(user)/PG")}
             className="flex-1 rounded-3xl border border-[#DBEAFE] bg-[#EFF6FF] p-5"
+            style={USER_SOFT_SHADOW}
           >
-            <View className="h-14 w-14 items-center justify-center rounded-2xl bg-white">
+            <View
+              className="h-14 w-14 items-center justify-center rounded-2xl bg-white"
+              style={USER_SOFT_SHADOW}
+            >
               <MaterialCommunityIcons
                 name="home-city"
                 size={32}
@@ -65,8 +76,12 @@ export default function Category() {
           <Pressable
             onPress={() => router.push("/(user)/hostel")}
             className="flex-1 rounded-3xl border border-[#CCFBF1] bg-[#F0FDFA] p-5"
+            style={USER_SOFT_SHADOW}
           >
-            <View className="h-14 w-14 items-center justify-center rounded-2xl bg-white">
+            <View
+              className="h-14 w-14 items-center justify-center rounded-2xl bg-white"
+              style={USER_SOFT_SHADOW}
+            >
               <MaterialCommunityIcons
                 name="office-building"
                 size={32}
@@ -87,7 +102,16 @@ export default function Category() {
       </View>
 
       {/* Bottom Navigation */}
-      <View className="flex-row border-t border-[#E2E8F0] bg-white px-5 py-4">
+      <View
+        className="flex-row border-t border-[#E2E8F0] bg-white px-5 py-4"
+        style={{
+          shadowColor: "#23436B",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 12,
+          elevation: 10,
+        }}
+      >
 
         {/* Home */}
         <Pressable

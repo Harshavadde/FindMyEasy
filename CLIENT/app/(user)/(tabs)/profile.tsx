@@ -12,8 +12,16 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { getCurrentUser } from "../../../services/auth";
+import {
+  getCurrentUser,
+  getIndianPhoneInputValue,
+} from "../../../services/auth";
 import type { AuthUser } from "../../../services/auth";
+import {
+  USER_CARD_BORDER,
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../../constants/userDesign";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -126,6 +134,10 @@ export default function ProfileScreen() {
   }
 
   const fullName = user.full_name?.trim() || "";
+  const phoneDigits = getIndianPhoneInputValue(
+    user.phone || user.phone_number || ""
+  );
+  const mobileNumber = phoneDigits ? `+91 ${phoneDigits}` : "Not provided";
   const initials =
     fullName
       .split(/\s+/)
@@ -141,6 +153,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.heading}>My Profile</Text>
+        <Text style={styles.subtitle}>Manage your FindEasy account</Text>
 
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
@@ -151,7 +164,7 @@ export default function ProfileScreen() {
             {fullName || "Name not provided"}
           </Text>
           <Text style={styles.phoneNumber}>
-            {user.phone_number || "Phone number not available"}
+            {mobileNumber}
           </Text>
 
           {!fullName ? (
@@ -191,28 +204,8 @@ export default function ProfileScreen() {
               />
             </View>
             <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Sign-in phone number</Text>
-              <Text style={styles.detailValue}>
-                {user.phone_number || "Not provided"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.separator} />
-
-          <View style={styles.detailRow}>
-            <View style={styles.iconBox}>
-              <MaterialCommunityIcons
-                name="phone-outline"
-                size={22}
-                color="#2563EB"
-              />
-            </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Phone number</Text>
-              <Text style={styles.detailValue}>
-                {user.phone ? `+91 ${user.phone}` : "Not provided"}
-              </Text>
+              <Text style={styles.detailLabel}>Mobile number</Text>
+              <Text style={styles.detailValue}>{mobileNumber}</Text>
             </View>
           </View>
         </View>
@@ -256,12 +249,23 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
-  content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24 },
+  safeArea: { flex: 1, backgroundColor: USER_SCREEN_BACKGROUND },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
   heading: { fontSize: 27, fontWeight: "800", color: "#0F172A" },
+  subtitle: { fontSize: 14, color: "#64748B", marginTop: 7 },
   profileCard: {
+    marginTop: 22,
     paddingVertical: 22,
     alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: USER_CARD_BORDER,
+    ...USER_SOFT_SHADOW,
   },
   avatar: {
     width: 76,
@@ -281,8 +285,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: USER_CARD_BORDER,
     paddingHorizontal: 15,
+    ...USER_SOFT_SHADOW,
   },
   detailRow: { flexDirection: "row", alignItems: "center", paddingVertical: 16, gap: 13 },
   iconBox: {
@@ -319,11 +324,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 9,
+    ...USER_SOFT_SHADOW,
   },
   logoutText: { color: "#DC2626", fontSize: 15, fontWeight: "700" },
   primaryButton: { backgroundColor: "#2563EB", paddingHorizontal: 22, paddingVertical: 12, borderRadius: 10, marginTop: 16 },
   primaryButtonText: { color: "#FFFFFF", fontWeight: "700" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC", padding: 24 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: USER_SCREEN_BACKGROUND,
+    padding: 24,
+  },
   muted: { color: "#64748B", marginTop: 12 },
   errorText: { color: "#DC2626", textAlign: "center", marginTop: 12 },
 });

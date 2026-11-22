@@ -22,6 +22,11 @@ import { router, useLocalSearchParams } from "expo-router";
 import { getPublicListing } from "../../../services/api";
 
 import type { Listing, ListingSharing } from "../../../types/listing";
+import {
+  USER_CARD_BORDER,
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../../constants/userDesign";
 
 /* -------------------------------------------------------------------------- */
 /*  Image helpers                                                             */
@@ -613,7 +618,7 @@ export default function UserListingDetails() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#F5F9FD]">
+      <View className="flex-1 items-center justify-center bg-[#F5F8FD]">
         <ActivityIndicator size="large" color="#2563EB" />
 
         <Text className="mt-3 text-[12px] text-[#64748B]">
@@ -625,7 +630,7 @@ export default function UserListingDetails() {
 
   if (!listing) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#F5F9FD] px-6">
+      <View className="flex-1 items-center justify-center bg-[#F5F8FD] px-6">
         <Text className="text-[18px] font-extrabold text-[#0F172A]">
           Property not found
         </Text>
@@ -660,7 +665,10 @@ export default function UserListingDetails() {
     : 0;
 
   return (
-    <View className="flex-1 bg-[#F5F9FD]">
+    <View
+      className="flex-1"
+      style={{ backgroundColor: USER_SCREEN_BACKGROUND }}
+    >
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
@@ -689,7 +697,10 @@ export default function UserListingDetails() {
             </View>
           </View>
 
-          <View className="mt-5 rounded-[18px] bg-white p-4">
+          <View
+            className="mt-5 rounded-[18px] border border-[#E7EEF8] bg-white p-4"
+            style={USER_SOFT_SHADOW}
+          >
             <Text className="text-[12px] text-[#64748B]">
               {selectedSharingGroup ? "Monthly Rent" : "Starting from"}
             </Text>
@@ -1118,7 +1129,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <View className="mt-4 rounded-[18px] bg-white p-4">
+    <View
+      className="mt-4 rounded-[18px] border bg-white p-4"
+      style={[{ borderColor: USER_CARD_BORDER }, USER_SOFT_SHADOW]}
+    >
       <Text className="mb-4 text-[16px] font-extrabold text-[#0F172A]">
         {title}
       </Text>

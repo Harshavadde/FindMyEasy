@@ -1,14 +1,19 @@
 import { useEffect } from "react";
 import { API_BASE_URL } from "../constants/api";
 import {
+  Animated,
   Alert,
   Image,
   Pressable,
+  StyleSheet,
   Text,
   View,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
+import { USER_CARD_BORDER } from "../constants/userDesign";
+import { usePressScale } from "../hooks/usePressScale";
 import type { Listing } from "../types/listing";
 import type { ListingProximityBadge } from "../services/api";
 import { useFavoritesStore } from "../store/favoritesStore";
@@ -22,6 +27,7 @@ type Props = {
   distanceLabel?: string;
   imageHeight?: number;
   elevated?: boolean;
+  focused?: boolean;
 };
 
 function getReachableImageUrl(url?: string | null): string | undefined {
@@ -55,7 +61,9 @@ export default function ListingCard({
   distanceLabel,
   imageHeight,
   elevated = false,
+  focused = false,
 }: Props) {
+  const { scale, onPressIn, onPressOut } = usePressScale();
   const listingId = String(listing.id);
   const storedIsFavorite = useFavoritesStore((state) =>
     state.favoriteIds.has(listingId)
@@ -135,58 +143,92 @@ export default function ListingCard({
         : "#60A5FA";
 
   return (
-    <Pressable
-      onPress={onPress}
-      className={`mb-4 overflow-hidden bg-white ${
-        compact ? "rounded-[18px]" : "rounded-[20px]"
-      }`}
-      style={{
-        borderWidth: 1,
-        borderColor: "#E8EEF5",
-        ...(elevated
-          ? {
-              elevation: 3,
-              shadowColor: "#0F172A",
-              shadowOpacity: 0.1,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 3 },
-            }
-          : {}),
-      }}
-    >
-      <View>
-        {coverImageUrl ? (
-          <Image
-            source={{ uri: coverImageUrl }}
-            className="w-full"
-            style={{ height: resolvedImageHeight }}
-            resizeMode="cover"
-            onError={(event) => {
-              console.log(
-                "FindEasy image load failed:",
-                event.nativeEvent.error
-              );
-              console.log("Image URL:", coverImageUrl);
-            }}
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        className={`mb-4 bg-white ${
+          compact ? "rounded-[18px]" : "rounded-[20px]"
+        }`}
+        style={[
+          {
+            borderWidth: 1,
+            borderColor: USER_CARD_BORDER,
+            shadowColor: "#000000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.06,
+            shadowRadius: 20,
+            elevation: 4,
+          },
+          elevated
+            ? {
+                elevation: 5,
+                shadowOpacity: 0.08,
+                shadowRadius: 20,
+                shadowOffset: { width: 0, height: 5 },
+              }
+            : undefined,
+          focused
+            ? {
+                elevation: 8,
+                shadowOpacity: 0.15,
+                shadowRadius: 25,
+                shadowOffset: { width: 0, height: 10 },
+              }
+            : undefined,
+        ]}
+      >
+        <View
+          className={`overflow-hidden ${
+            compact ? "rounded-t-[18px]" : "rounded-t-[20px]"
+          }`}
+        >
+          {coverImageUrl ? (
+            <Image
+              source={{ uri: coverImageUrl }}
+              className="w-full"
+              style={{ height: resolvedImageHeight }}
+              resizeMode="cover"
+              onError={(event) => {
+                console.log(
+                  "FindEasy image load failed:",
+                  event.nativeEvent.error
+                );
+                console.log("Image URL:", coverImageUrl);
+              }}
+            />
+          ) : (
+            <View
+              className="w-full items-center justify-center bg-[#EAF2FF]"
+              style={{ height: resolvedImageHeight }}
+            >
+              <Text className="text-[40px]">🏠</Text>
+              <Text className="mt-2 text-[12px] font-bold text-[#64748B]">
+                No property photo
+              </Text>
+            </View>
+          )}
+
+          <LinearGradient
+            pointerEvents="none"
+            colors={[
+              "rgba(15, 23, 42, 0.02)",
+              "rgba(15, 23, 42, 0.12)",
+              "rgba(15, 23, 42, 0.88)",
+            ]}
+            locations={[0, 0.5, 1]}
+            style={StyleSheet.absoluteFill}
           />
-        ) : (
-          <View
-            className="w-full items-center justify-center bg-[#EAF2FF]"
-            style={{ height: resolvedImageHeight }}
-          >
-            <Text className="text-[40px]">🏠</Text>
-            <Text className="mt-2 text-[12px] font-bold text-[#64748B]">
-              No property photo
-            </Text>
-          </View>
-        )}
 
         {proximityBadge ? (
           <View
             accessibilityLabel={`${proximityBadge.distance_m} meters from ${
               proximityLabel ?? "nearby place"
             }`}
-            className="absolute left-3 top-3 max-w-[75%] flex-row items-center rounded-[7px] bg-[#111827]/90 px-2.5 py-1.5"
+            className={`absolute left-3 max-w-[75%] flex-row items-center rounded-full bg-[#111827]/90 px-2.5 py-1.5 ${
+              distanceLabel ? "top-14" : "top-3"
+            }`}
           >
             <MaterialCommunityIcons
               name={proximityIcon}
@@ -244,94 +286,106 @@ export default function ListingCard({
             shadowRadius: 4,
           }}
         >
-          <Text className={compact ? "text-[21px]" : "text-[25px]"}>
-            {isFavorite ? "❤️" : "♡"}
-          </Text>
+          <MaterialCommunityIcons
+            name={isFavorite ? "heart" : "heart-outline"}
+            size={compact ? 20 : 24}
+            color={isFavorite ? "#E11D48" : "#334155"}
+          />
         </Pressable>
-      </View>
-
-      <View className={compact ? "p-4" : "p-5"}>
-        <View className="flex-row items-start justify-between">
+        <View
+          pointerEvents="none"
+          className="absolute bottom-4 left-4 right-4 flex-row items-end justify-between"
+        >
           <View className="flex-1 pr-3">
             <Text
-              className={`font-extrabold text-[#0F172A] ${
+              className={`font-extrabold text-white ${
                 compact ? "text-[15px]" : "text-[17px]"
               }`}
               numberOfLines={1}
             >
               {listing.name}
             </Text>
-
             <Text
-              className="mt-1 text-[11px] text-[#64748B]"
+              className="mt-1 text-[11px] font-semibold text-white/90"
               numberOfLines={1}
             >
               {listing.area}, {listing.city}
             </Text>
           </View>
-
-          <View className="rounded-full bg-[#EFF6FF] px-3 py-1">
-            <Text className="text-[10px] font-extrabold text-[#2563EB]">
-              {listing.property_type}
-            </Text>
-          </View>
-        </View>
-
-        <View className="my-4 h-px bg-[#E8EEF5]" />
-
-        <View className="flex-row">
-          <View className="mr-3 flex-1 rounded-[14px] bg-[#F8FAFC] px-3.5 py-3">
-            <Text className="text-[10px] font-semibold text-[#64748B]">
-              Starting from
-            </Text>
-            <Text
-              numberOfLines={1}
-              className={`font-extrabold text-[#0F172A] ${
-                compact ? "text-[17px]" : "text-[19px]"
-              }`}
-            >
-              ₹{startingPrice.toLocaleString("en-IN")}
-            </Text>
-            <Text className="text-[10px] text-[#64748B]">
-              per month
-            </Text>
-          </View>
-
-          <View className="flex-1 items-center justify-center rounded-[14px] bg-[#F0FDF4] px-3 py-3">
-            <Text className="text-[18px] font-extrabold text-[#15803D]">
-              {listing.available_beds}
-            </Text>
-            <Text className="mt-0.5 text-center text-[10px] font-semibold text-[#166534]">
-              beds available
-            </Text>
-          </View>
-        </View>
-
-        <View className="mt-4 flex-row flex-wrap">
-          <View className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2">
-            <Text className="text-[10px] font-bold text-[#475569]">
-              {listing.gender}
-            </Text>
-          </View>
-
-          <View className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2">
-            <Text className="text-[10px] font-bold text-[#475569]">
-              {listing.ac_type}
-            </Text>
-          </View>
-
-          {(listing.facilities ?? []).slice(0, 2).map((facility) => (
-            <View
-              key={facility}
-              className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2"
-            >
-              <Text className="text-[10px] font-bold text-[#475569]">
-                {facility}
+          <View className="items-end">
+            <View className="rounded-full bg-white/95 px-3 py-1.5">
+              <Text className="text-[10px] font-extrabold text-[#1D4ED8]">
+                {listing.property_type}
               </Text>
             </View>
-          ))}
+            {listing.food_available === "Yes" ? (
+              <View className="mt-1 rounded-full bg-[#DCFCE7] px-2.5 py-1">
+                <Text className="text-[9px] font-extrabold text-[#166534]">
+                  FOOD INCLUDED
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
-      </View>
-    </Pressable>
+        </View>
+
+        <View
+          className={`bg-white ${
+            compact ? "rounded-b-[18px] p-4" : "rounded-b-[20px] p-5"
+          }`}
+        >
+          <View className="flex-row">
+            <View className="mr-3 flex-1 rounded-[14px] bg-[#F8FAFC] px-3.5 py-3">
+              <Text className="text-[10px] font-semibold text-[#64748B]">
+                Starting from
+              </Text>
+              <Text
+                numberOfLines={1}
+                className={`font-extrabold text-[#0F172A] ${
+                  compact ? "text-[17px]" : "text-[19px]"
+                }`}
+              >
+                ₹{startingPrice.toLocaleString("en-IN")}
+              </Text>
+              <Text className="text-[10px] text-[#64748B]">per month</Text>
+            </View>
+
+            <View className="flex-1 items-center justify-center rounded-[14px] bg-[#F0FDF4] px-3 py-3">
+              <Text className="text-[18px] font-extrabold text-[#15803D]">
+                {listing.available_beds}
+              </Text>
+              <Text className="mt-0.5 text-center text-[10px] font-semibold text-[#166534]">
+                beds available
+              </Text>
+            </View>
+          </View>
+
+          <View className="mt-4 flex-row flex-wrap">
+            <View className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2">
+              <Text className="text-[10px] font-bold text-[#475569]">
+                {listing.gender}
+              </Text>
+            </View>
+
+            <View className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2">
+              <Text className="text-[10px] font-bold text-[#475569]">
+                {listing.ac_type}
+              </Text>
+            </View>
+
+            {(listing.facilities ?? []).slice(0, 2).map((facility) => (
+              <View
+                key={facility}
+                className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2"
+              >
+                <Text className="text-[10px] font-bold text-[#475569]">
+                  {facility}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 }

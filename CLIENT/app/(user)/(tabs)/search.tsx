@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentRef } from "react";
 
 import {
   ActivityIndicator,
@@ -11,12 +12,15 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
+import { BlurTargetView } from "expo-blur";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
 import ListingCard from "../../../components/ListingCard";
-import VoiceSearchButton from "../../../components/VoiceSearchButton";
+import { USER_SCREEN_BACKGROUND } from "../../../constants/userDesign";
+import { useBottomNavigationScroll } from "../../../contexts/BottomNavigationScrollContext";
 import { getPublicListings } from "../../../services/api";
 import type { Listing } from "../../../types/listing";
 
@@ -58,6 +62,12 @@ function getSuggestionIcon(type: SuggestionType): string {
 }
 
 export default function UserSearch() {
+  const {
+    activateBlurTarget,
+    deactivateBlurTarget,
+    onScroll: handleBottomNavigationScroll,
+  } = useBottomNavigationScroll();
+  const screenBlurTarget = useRef<ComponentRef<typeof View> | null>(null);
   const [query, setQuery] = useState("");
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +76,13 @@ export default function UserSearch() {
   const [searchFocused, setSearchFocused] = useState(false);
   const inputRef = useRef<TextInputInstance | null>(null);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      activateBlurTarget(screenBlurTarget);
+      return () => deactivateBlurTarget(screenBlurTarget);
+    }, [activateBlurTarget, deactivateBlurTarget])
+  );
 
   const loadListings = useCallback(async (forceRefresh = false) => {
     setLoadError(null);
@@ -181,18 +198,27 @@ export default function UserSearch() {
   const showSuggestions = searchFocused && query.trim().length > 0;
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F5F9FD]" edges={["top"]}>
+    <BlurTargetView ref={screenBlurTarget} style={{ flex: 1 }}>
+      <SafeAreaView
+        className="flex-1"
+        style={{ backgroundColor: USER_SCREEN_BACKGROUND }}
+        edges={["top"]}
+      >
       <FlatList
         data={results}
         keyExtractor={(item) => String(item.id)}
         keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+        onScroll={(event) =>
+          handleBottomNavigationScroll(event.nativeEvent.contentOffset.y)
+        }
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingTop: 12,
-          paddingBottom: 40,
+          paddingBottom: 140,
           flexGrow: 1,
         }}
         ListHeaderComponent={
@@ -208,14 +234,29 @@ export default function UserSearch() {
             </Text>
 
             <View
-              className={`mt-4 flex-row items-center rounded-[18px] bg-white px-4 ${
-                searchFocused
-                  ? "border-2 border-[#2563EB]"
-                  : "border border-[#E2E8F0]"
-              }`}
-              style={{ minHeight: 56 }}
+              style={{
+                marginTop: 16,
+                minHeight: 52,
+                paddingHorizontal: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: "#E2E8F0",
+                backgroundColor: "#FFFFFF",
+                shadowColor: "#0F172A",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.04,
+                shadowRadius: 5,
+                elevation: 1,
+              }}
             >
-              <Text className="mr-3 text-[21px]">🔍</Text>
+              <MaterialCommunityIcons
+                name="magnify"
+                size={20}
+                color="#64748B"
+                style={{ marginRight: 10 }}
+              />
               <TextInput
                 ref={inputRef}
                 value={query}
@@ -235,15 +276,14 @@ export default function UserSearch() {
                   Keyboard.dismiss();
                   setSearchFocused(false);
                 }}
-                placeholder="Search PGs, hostels or areas..."
-                placeholderTextColor="#94A3B8"
+                placeholder="Search by PG name, area or city"
+                placeholderTextColor="#6B7280"
                 returnKeyType="search"
                 autoCorrect={false}
                 autoCapitalize="none"
-                className="flex-1 text-[15px] text-[#0F172A]"
-                style={{ minHeight: 54 }}
+                className="h-[50px] flex-1 text-[14px] text-[#0F172A]"
+                accessibilityLabel="Search properties"
               />
-              <VoiceSearchButton onTranscriptChange={setQuery} />
               {query.length > 0 && (
                 <Pressable
                   onPress={() => {
@@ -389,6 +429,7 @@ export default function UserSearch() {
           )
         }
       />
-    </SafeAreaView>
+      </SafeAreaView>
+    </BlurTargetView>
   );
 }

@@ -40,17 +40,7 @@
           "androidGoogleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
         }
       ],
-      "expo-status-bar",
-      [
-        "expo-speech-recognition",
-        {
-          "microphonePermission": "Allow FindMyEasy to use the microphone for voice search.",
-          "speechRecognitionPermission": "Allow FindMyEasy to convert your speech into search text.",
-          "androidSpeechServicePackages": [
-            "com.google.android.googlequicksearchbox"
-          ]
-        }
-      ]
+      "expo-status-bar"
     ],
     "web": {
       "bundler": "metro"

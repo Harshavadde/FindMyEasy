@@ -24,6 +24,10 @@ import {
 } from "../../services/api";
 import type { ListingProximityBadge } from "../../services/api";
 import type { Listing } from "../../types/listing";
+import {
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../constants/userDesign";
 
 type Coordinates = {
   latitude: number;
@@ -632,8 +636,15 @@ export default function NearbyPGsScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]" edges={["top"]}>
-      <View className="flex-row items-center border-b border-[#E2E8F0] bg-white px-4 py-3">
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: USER_SCREEN_BACKGROUND }}
+      edges={["top"]}
+    >
+      <View
+        className="flex-row items-center border-b border-[#E2E8F0] bg-white px-4 py-3"
+        style={USER_SOFT_SHADOW}
+      >
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"

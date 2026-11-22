@@ -13,6 +13,10 @@ import { router } from "expo-router";
 
 import { getPublicListings } from "../../services/api";
 import type { Listing } from "../../types/listing";
+import {
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../constants/userDesign";
 
 export default function UserFilters() {
   const [propertyType, setPropertyType] =
@@ -67,7 +71,8 @@ export default function UserFilters() {
 
   return (
     <ScrollView
-      className="flex-1 bg-[#F5F9FD]"
+      className="flex-1"
+      style={{ backgroundColor: USER_SCREEN_BACKGROUND }}
       contentContainerStyle={{
         paddingHorizontal: 20,
         paddingTop: 55,
@@ -95,6 +100,7 @@ export default function UserFilters() {
         style={{
           borderWidth: 1,
           borderColor: "#E2E8F0",
+          ...USER_SOFT_SHADOW,
         }}
       />
 
@@ -159,6 +165,7 @@ export default function UserFilters() {
             style={{
               borderWidth: 1,
               borderColor: "#E2E8F0",
+              ...USER_SOFT_SHADOW,
             }}
           />
 
@@ -179,6 +186,7 @@ export default function UserFilters() {
             style={{
               borderWidth: 1,
               borderColor: "#E2E8F0",
+              ...USER_SOFT_SHADOW,
             }}
           />
         </View>
@@ -187,6 +195,7 @@ export default function UserFilters() {
       <Pressable
         onPress={applyFilters}
         className="mt-8 h-[56px] items-center justify-center rounded-[17px] bg-[#2563EB]"
+        style={USER_SOFT_SHADOW}
       >
         <Text className="text-[15px] font-extrabold text-white">
           Apply Filters
@@ -238,6 +247,7 @@ function Choice({
         borderColor: selected
           ? "#2563EB"
           : "#E2E8F0",
+        ...(selected ? USER_SOFT_SHADOW : {}),
       }}
     >
       <Text

@@ -16,8 +16,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   getCurrentUser,
+  getIndianPhoneInputValue,
   updateCurrentUser,
 } from "../../services/auth";
+import {
+  USER_CARD_BORDER,
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../constants/userDesign";
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -40,7 +46,7 @@ export default function EditProfileScreen() {
           const user = await getCurrentUser();
           if (active) {
             setFullName(user.full_name ?? "");
-            setPhone(user.phone ?? "");
+            setPhone(getIndianPhoneInputValue(user.phone ?? ""));
             setAuthPhoneNumber(user.phone_number ?? "");
           }
         } catch (err) {
@@ -93,7 +99,7 @@ export default function EditProfileScreen() {
       Alert.alert("Profile updated", "Your profile has been updated successfully.", [
         {
           text: "OK",
-          onPress: () => router.replace("/(user)/profile"),
+          onPress: () => router.replace("/(user)/(tabs)/profile"),
         },
       ]);
     } catch (err) {
@@ -128,7 +134,7 @@ export default function EditProfileScreen() {
         >
           <Pressable
             style={styles.backButton}
-            onPress={() => router.replace("/(user)/profile")}
+            onPress={() => router.replace("/(user)/(tabs)/profile")}
           >
             <MaterialCommunityIcons
               name="arrow-left"
@@ -168,7 +174,7 @@ export default function EditProfileScreen() {
             </Text>
 
             <Text style={[styles.label, styles.phoneLabel]}>
-              Phone number <Text style={styles.optionalMarker}>(optional)</Text>
+              Mobile number <Text style={styles.optionalMarker}>(optional)</Text>
             </Text>
             <View style={styles.phoneInputContainer}>
               <Text style={styles.countryCode}>+91</Text>
@@ -185,7 +191,7 @@ export default function EditProfileScreen() {
                 maxLength={10}
                 editable={!saving}
                 returnKeyType="done"
-                accessibilityLabel="Optional Indian phone number"
+                accessibilityLabel="Optional Indian mobile number"
               />
             </View>
             <Text style={styles.hint}>
@@ -243,7 +249,7 @@ export default function EditProfileScreen() {
 
             <Pressable
               style={styles.cancelButton}
-              onPress={() => router.replace("/(user)/profile")}
+              onPress={() => router.replace("/(user)/(tabs)/profile")}
               disabled={saving}
             >
               <Text style={styles.cancelText}>Cancel</Text>
@@ -256,7 +262,7 @@ export default function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
+  safeArea: { flex: 1, backgroundColor: USER_SCREEN_BACKGROUND },
   flex: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28 },
   backButton: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 25 },
@@ -267,8 +273,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: USER_CARD_BORDER,
     padding: 20,
+    ...USER_SOFT_SHADOW,
   },
   label: { fontSize: 14, fontWeight: "700", color: "#0F172A", marginBottom: 9 },
   requiredMarker: { color: "#DC2626" },
@@ -334,11 +341,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    ...USER_SOFT_SHADOW,
   },
   saveText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   disabledButton: { opacity: 0.65 },
   cancelButton: { minHeight: 46, alignItems: "center", justifyContent: "center", marginTop: 8 },
   cancelText: { color: "#475569", fontSize: 15, fontWeight: "600" },
-  center: { flex: 1, backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center" },
+  center: {
+    flex: 1,
+    backgroundColor: USER_SCREEN_BACKGROUND,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   helper: { color: "#64748B", marginTop: 12 },
 });

@@ -13,6 +13,10 @@ import {
   router,
   useLocalSearchParams,
 } from "expo-router";
+import {
+  USER_SCREEN_BACKGROUND,
+  USER_SOFT_SHADOW,
+} from "../../constants/userDesign";
 
 /*
  * ============================================================
@@ -443,7 +447,7 @@ export default function PGPage() {
    * ==========================================================
    * FIND PGs
    *
-   * Send the selected filters to home.tsx.
+   * Send the selected filters to the dedicated results screen.
    *
    * We use JSON strings because Expo Router params
    * are URL parameters.
@@ -458,8 +462,8 @@ export default function PGPage() {
 
     setCityError(false);
 
-    router.replace({
-      pathname: "/(user)/home",
+    router.push({
+      pathname: "/(user)/pg-results",
       params: {
         pgSearch: "true",
         propertyType: selectedPropertyType,
@@ -492,7 +496,10 @@ export default function PGPage() {
    */
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: USER_SCREEN_BACKGROUND }}
+    >
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -559,6 +566,7 @@ export default function PGPage() {
           <Pressable
             onPress={() => setCityModalVisible(true)}
             className="mt-4 rounded-2xl border border-[#E2E8F0] bg-white p-4"
+            style={USER_SOFT_SHADOW}
           >
 
             <Text className="text-sm text-[#64748B]">
@@ -603,6 +611,7 @@ export default function PGPage() {
             onPress={() => setAreaModalVisible(true)}
             className={`mt-3 rounded-2xl border border-[#E2E8F0] bg-white p-4 ${!selectedCity ? "opacity-50" : ""
               }`}
+            style={USER_SOFT_SHADOW}
           >
 
             <Text className="text-sm text-[#64748B]">
@@ -633,7 +642,10 @@ export default function PGPage() {
           </Pressable>
 
           {/* PROPERTY TYPE — SINGLE SELECTION */}
-          <View className="mt-4 rounded-2xl border border-[#E2E8F0] bg-white p-4">
+          <View
+            className="mt-4 rounded-2xl border border-[#E2E8F0] bg-white p-4"
+            style={USER_SOFT_SHADOW}
+          >
             <Text className="text-sm text-[#64748B]">
               Property Type
             </Text>
@@ -677,7 +689,10 @@ export default function PGPage() {
 
 
           {/* PG TYPE / HOSTEL TYPE */}
-          <View className="rounded-2xl border border-[#E2E8F0] bg-white p-4">
+          <View
+            className="rounded-2xl border border-[#E2E8F0] bg-white p-4"
+            style={USER_SOFT_SHADOW}
+          >
             <Text className="text-sm text-[#64748B]">
               {selectedPropertyType === "PG" ? "PG Type" : "Hostel Type"}
             </Text>
@@ -746,6 +761,7 @@ export default function PGPage() {
               setRoomSharingModalVisible(true)
             }
             className="mt-3 rounded-2xl border border-[#E2E8F0] bg-white p-4"
+            style={USER_SOFT_SHADOW}
           >
 
             <Text className="text-sm text-[#64748B]">
@@ -797,7 +813,10 @@ export default function PGPage() {
     MULTIPLE SELECTION
 ================================================= */}
 
-          <View className="mt-3 rounded-2xl border border-[#E2E8F0] bg-white p-4">
+          <View
+            className="mt-3 rounded-2xl border border-[#E2E8F0] bg-white p-4"
+            style={USER_SOFT_SHADOW}
+          >
             <Text className="text-sm text-[#64748B]">
               AC / Non-AC
             </Text>
