@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,16 +9,10 @@ import {
   type PropsWithChildren,
   type RefObject,
 } from "react";
-import {
-  LayoutAnimation,
-  Platform,
-  UIManager,
-  View,
-} from "react-native";
+import { View } from "react-native";
 
-const SCROLL_THRESHOLD = 50;
-const SCROLL_IDLE_MS = 420;
-const DIRECTION_THRESHOLD = 1;
+const SCROLL_THRESHOLD = 40;
+const DIRECTION_THRESHOLD = 4;
 
 type BottomNavigationScrollContextValue = {
   compact: boolean;
@@ -36,13 +29,6 @@ type BottomNavigationScrollContextValue = {
 const BottomNavigationScrollContext =
   createContext<BottomNavigationScrollContextValue | null>(null);
 
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
 export function BottomNavigationScrollProvider({
   children,
 }: PropsWithChildren) {
@@ -51,12 +37,10 @@ export function BottomNavigationScrollProvider({
     useState<RefObject<ComponentRef<typeof View> | null> | null>(null);
   const compactRef = useRef(false);
   const lastOffsetY = useRef(0);
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateCompact = useCallback((nextCompact: boolean) => {
     if (compactRef.current === nextCompact) return;
 
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     compactRef.current = nextCompact;
     setCompact(nextCompact);
   }, []);
@@ -82,8 +66,6 @@ export function BottomNavigationScrollProvider({
 
       if (offsetY <= SCROLL_THRESHOLD) {
         updateCompact(false);
-        if (idleTimer.current) clearTimeout(idleTimer.current);
-        idleTimer.current = null;
         return;
       }
 
@@ -93,21 +75,8 @@ export function BottomNavigationScrollProvider({
       } else if (delta < -DIRECTION_THRESHOLD) {
         updateCompact(false);
       }
-
-      if (idleTimer.current) clearTimeout(idleTimer.current);
-      idleTimer.current = setTimeout(
-        () => updateCompact(false),
-        SCROLL_IDLE_MS
-      );
     },
     [updateCompact]
-  );
-
-  useEffect(
-    () => () => {
-      if (idleTimer.current) clearTimeout(idleTimer.current);
-    },
-    []
   );
 
   const value = useMemo(

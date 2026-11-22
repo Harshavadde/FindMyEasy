@@ -15,6 +15,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { USER_CARD_BORDER } from "../constants/userDesign";
 import { usePressScale } from "../hooks/usePressScale";
 import type { Listing } from "../types/listing";
+import {
+  getListingAudienceBadge,
+  isVerifiedListing,
+} from "../utils/listingPresentation";
 import type { ListingProximityBadge } from "../services/api";
 import { useFavoritesStore } from "../store/favoritesStore";
 
@@ -28,6 +32,7 @@ type Props = {
   imageHeight?: number;
   elevated?: boolean;
   focused?: boolean;
+  onScheduleVisit?: () => void;
 };
 
 function getReachableImageUrl(url?: string | null): string | undefined {
@@ -62,6 +67,7 @@ export default function ListingCard({
   imageHeight,
   elevated = false,
   focused = false,
+  onScheduleVisit,
 }: Props) {
   const { scale, onPressIn, onPressOut } = usePressScale();
   const listingId = String(listing.id);
@@ -117,6 +123,8 @@ export default function ListingCard({
     sharingPrices.length > 0
       ? Math.min(...sharingPrices)
       : Number(listing.monthly_price);
+  const audienceBadge = getListingAudienceBadge(listing.gender);
+  const verified = isVerifiedListing(listing.status);
 
   console.log("FindEasy cover image URL:", coverImage?.url);
   const proximityLabel =
@@ -269,7 +277,10 @@ export default function ListingCard({
         ) : null}
 
         <Pressable
-          onPress={toggleFavorite}
+          onPress={(event) => {
+            event.stopPropagation();
+            void toggleFavorite();
+          }}
           disabled={favoriteLoading}
           accessibilityRole="button"
           accessibilityLabel={
@@ -297,6 +308,18 @@ export default function ListingCard({
           className="absolute bottom-4 left-4 right-4 flex-row items-end justify-between"
         >
           <View className="flex-1 pr-3">
+            {verified ? (
+              <View className="mb-1.5 self-start flex-row items-center rounded-md bg-[#16A34A] px-2 py-1">
+                <MaterialCommunityIcons
+                  name="check-decagram"
+                  size={12}
+                  color="#FFFFFF"
+                />
+                <Text className="ml-1 text-[9px] font-extrabold text-white">
+                  Verified
+                </Text>
+              </View>
+            ) : null}
             <Text
               className={`font-extrabold text-white ${
                 compact ? "text-[15px]" : "text-[17px]"
@@ -350,20 +373,29 @@ export default function ListingCard({
               <Text className="text-[10px] text-[#64748B]">per month</Text>
             </View>
 
-            <View className="flex-1 items-center justify-center rounded-[14px] bg-[#F0FDF4] px-3 py-3">
-              <Text className="text-[18px] font-extrabold text-[#15803D]">
-                {listing.available_beds}
-              </Text>
-              <Text className="mt-0.5 text-center text-[10px] font-semibold text-[#166534]">
-                beds available
-              </Text>
+            <View className="flex-1 items-end justify-center">
+              <View className="flex-row items-center rounded-full border border-[#BBF7D0] bg-[#ECFDF5] px-2.5 py-2">
+                <View className="mr-1.5 h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+                <Text className="text-[10px] font-extrabold text-[#047857]">
+                  {listing.available_beds} beds left
+                </Text>
+              </View>
             </View>
           </View>
 
           <View className="mt-4 flex-row flex-wrap">
-            <View className="mb-2 mr-2 rounded-full bg-[#F1F5F9] px-3 py-2">
-              <Text className="text-[10px] font-bold text-[#475569]">
-                {listing.gender}
+            <View
+              className="mb-2 mr-2 rounded-full border px-3 py-2"
+              style={{
+                backgroundColor: audienceBadge.backgroundColor,
+                borderColor: audienceBadge.borderColor,
+              }}
+            >
+              <Text
+                className="text-[10px] font-extrabold"
+                style={{ color: audienceBadge.textColor }}
+              >
+                {audienceBadge.label}
               </Text>
             </View>
 
@@ -384,6 +416,45 @@ export default function ListingCard({
               </View>
             ))}
           </View>
+
+          {onScheduleVisit ? (
+            <View className="mt-1 flex-row gap-2">
+              {onPress ? (
+                <Pressable
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onPress();
+                  }}
+                  accessibilityRole="button"
+                  className="h-[44px] flex-1 items-center justify-center rounded-[13px] bg-[#4F46E5]"
+                >
+                  <Text className="text-[11px] font-extrabold text-white">
+                    View Rooms &amp; Menu
+                  </Text>
+                </Pressable>
+              ) : null}
+              {onScheduleVisit ? (
+                <Pressable
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onScheduleVisit();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Schedule a free visit to ${listing.name}`}
+                  className="h-[44px] flex-1 flex-row items-center justify-center rounded-[13px] border border-[#BFDBFE] bg-[#EFF6FF]"
+                >
+                  <MaterialCommunityIcons
+                    name="calendar-check-outline"
+                    size={16}
+                    color="#2563EB"
+                  />
+                  <Text className="ml-1.5 text-[11px] font-extrabold text-[#1D4ED8]">
+                    Free Visit
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </Pressable>
     </Animated.View>

@@ -12,7 +12,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 
 import ListingCard from "../../components/ListingCard";
+import ListingDetailSheet from "../../components/ListingDetailSheet";
 import ListingLocationMap from "../../components/ListingLocationMap";
+import ScheduleVisitModal from "../../components/ScheduleVisitModal";
 import type {
   LocationCoordinate,
   LocationRegion,
@@ -24,6 +26,9 @@ import {
 } from "../../services/api";
 import type { ListingProximityBadge } from "../../services/api";
 import type { Listing } from "../../types/listing";
+import type { NewScheduledVisit } from "../../types/visit";
+import { useFavoritesStore } from "../../store/favoritesStore";
+import { useScheduledVisitsStore } from "../../store/scheduledVisitsStore";
 import {
   USER_SCREEN_BACKGROUND,
   USER_SOFT_SHADOW,
@@ -100,6 +105,11 @@ async function getCurrentCoordinates(): Promise<Coordinates> {
 }
 
 export default function NearbyPGsScreen() {
+  const [detailListing, setDetailListing] = useState<Listing | null>(null);
+  const [visitListing, setVisitListing] = useState<Listing | null>(null);
+  const addScheduledVisit = useScheduledVisitsStore((state) => state.addVisit);
+  const showToast = useFavoritesStore((state) => state.showToast);
+
   const {
     selectedLocation: selectedLocationParam,
     selectedLocationType: selectedLocationTypeParam,
@@ -131,6 +141,12 @@ export default function NearbyPGsScreen() {
     typeof selectedLocationParam === "string"
       ? selectedLocationParam
       : "your selected location";
+
+  const submitVisitRequest = (visit: NewScheduledVisit) => {
+    addScheduledVisit(visit);
+    setVisitListing(null);
+    showToast("Visit request saved for this session.");
+  };
   const selectedLocation = useMemo<LocationCoordinate | null>(() => {
     const latitude = Number(selectedLatitudeParam);
     const longitude = Number(selectedLongitudeParam);
@@ -869,17 +885,28 @@ export default function NearbyPGsScreen() {
                     : formatDistance(distanceKm)
                 }
                 proximityBadge={proximityBadge}
-                onPress={() =>
-                  router.push({
-                    pathname: "/(user)/listing/[id]",
-                    params: { id: String(listing.id) },
-                  })
-                }
+                onPress={() => setDetailListing(listing)}
+                onScheduleVisit={() => setVisitListing(listing)}
               />
             </View>
           ))
         )}
       </ScrollView>
+      <ListingDetailSheet
+        visible={detailListing !== null}
+        listing={detailListing}
+        onClose={() => setDetailListing(null)}
+        onScheduleVisit={() => {
+          if (detailListing) setVisitListing(detailListing);
+          setDetailListing(null);
+        }}
+      />
+      <ScheduleVisitModal
+        visible={visitListing !== null}
+        listing={visitListing}
+        onClose={() => setVisitListing(null)}
+        onSubmit={submitVisitRequest}
+      />
     </SafeAreaView>
   );
 }

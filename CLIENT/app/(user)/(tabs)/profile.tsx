@@ -12,6 +12,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   getCurrentUser,
   getIndianPhoneInputValue,
@@ -22,6 +23,7 @@ import {
   USER_SCREEN_BACKGROUND,
   USER_SOFT_SHADOW,
 } from "../../../constants/userDesign";
+import { useScheduledVisitsStore } from "../../../store/scheduledVisitsStore";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -30,6 +32,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(!sessionUser);
   const [error, setError] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
+  const visits = useScheduledVisitsStore((state) => state.visits);
 
   const loadProfile = useCallback(async () => {
     if (!sessionUser) setLoading(true);
@@ -156,23 +159,74 @@ export default function ProfileScreen() {
         <Text style={styles.subtitle}>Manage your FindEasy account</Text>
 
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
+          <LinearGradient
+            colors={["#4F46E5", "#8B5CF6"]}
+            style={styles.avatar}
+          >
             <Text style={styles.avatarText}>{initials}</Text>
-          </View>
-
-          <Text style={styles.name}>
-            {fullName || "Name not provided"}
-          </Text>
-          <Text style={styles.phoneNumber}>
-            {mobileNumber}
-          </Text>
-
-          {!fullName ? (
-            <Text style={styles.missingText}>
-              Add your name to complete your profile.
+          </LinearGradient>
+          <View style={styles.profileInfo}>
+            <Text style={styles.name} numberOfLines={1}>
+              {fullName || "Name not provided"}
             </Text>
-          ) : null}
+            <View style={styles.phoneRow}>
+              <MaterialCommunityIcons
+                name="phone-outline"
+                size={14}
+                color="#64748B"
+              />
+              <Text style={styles.phoneNumber}>{mobileNumber}</Text>
+            </View>
+            {!fullName ? (
+              <Text style={styles.missingText}>
+                Add your name to complete your profile.
+              </Text>
+            ) : null}
+          </View>
         </View>
+
+        <Text style={styles.sectionTitle}>Scheduled Visits</Text>
+        {visits.length > 0 ? (
+          visits.map((visit) => (
+            <View key={visit.id} style={styles.visitCard}>
+              <View style={styles.visitIcon}>
+                <MaterialCommunityIcons
+                  name="calendar-check-outline"
+                  size={21}
+                  color="#16A34A"
+                />
+              </View>
+              <View style={styles.visitContent}>
+                <Text style={styles.visitName}>{visit.listingName}</Text>
+                <Text style={styles.visitDetail}>
+                  {visit.area}, {visit.city}
+                </Text>
+                <Text style={styles.visitDetail}>
+                  {new Date(
+                    `${visit.preferredDate}T00:00:00`
+                  ).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}{" "}
+                  · {visit.preferredTime}
+                </Text>
+                <Text style={styles.visitStatus}>{visit.status}</Text>
+                {visit.showSimilarProperties ? (
+                  <Text style={styles.visitDetail}>
+                    Similar properties requested
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyVisits}>
+            <Text style={styles.visitDetail}>
+              Your scheduled visit requests will appear here.
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.sectionTitle}>Account information</Text>
 
@@ -259,8 +313,10 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: "#64748B", marginTop: 7 },
   profileCard: {
     marginTop: 22,
-    paddingVertical: 22,
+    padding: 16,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 13,
     backgroundColor: "#FFFFFF",
     borderRadius: 22,
     borderWidth: 1,
@@ -268,19 +324,69 @@ const styles = StyleSheet.create({
     ...USER_SOFT_SHADOW,
   },
   avatar: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: "#DBEAFE",
+    width: 56,
+    height: 56,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 13,
+    overflow: "hidden",
   },
-  avatarText: { color: "#1D4ED8", fontSize: 27, fontWeight: "800" },
-  name: { fontSize: 21, fontWeight: "700", color: "#0F172A", textAlign: "center" },
-  phoneNumber: { fontSize: 14, color: "#64748B", marginTop: 7, textAlign: "center" },
-  missingText: { fontSize: 12, color: "#B45309", marginTop: 10, textAlign: "center" },
-  sectionTitle: { fontSize: 17, fontWeight: "700", color: "#0F172A", marginTop: 25, marginBottom: 11 },
+  avatarText: { color: "#FFFFFF", fontSize: 20, fontWeight: "800" },
+  profileInfo: { flex: 1 },
+  name: { fontSize: 16, fontWeight: "800", color: "#0F172A" },
+  phoneRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 5 },
+  phoneNumber: { fontSize: 12, color: "#64748B" },
+  missingText: { fontSize: 11, color: "#B45309", marginTop: 7 },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#94A3B8",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    marginTop: 25,
+    marginBottom: 11,
+  },
+  visitCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 10,
+    padding: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: USER_CARD_BORDER,
+    ...USER_SOFT_SHADOW,
+  },
+  visitIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0FDF4",
+  },
+  visitContent: { flex: 1 },
+  visitName: { fontSize: 14, fontWeight: "700", color: "#0F172A" },
+  visitDetail: { fontSize: 12, color: "#64748B", marginTop: 4 },
+  visitStatus: {
+    alignSelf: "flex-start",
+    marginTop: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FEF3C7",
+    color: "#92400E",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  emptyVisits: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: USER_CARD_BORDER,
+    backgroundColor: "#FFFFFF",
+  },
   detailsCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,

@@ -12,7 +12,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 
 import ListingCard from "../../components/ListingCard";
+import ListingDetailSheet from "../../components/ListingDetailSheet";
+import ScheduleVisitModal from "../../components/ScheduleVisitModal";
 import { USER_SCREEN_BACKGROUND } from "../../constants/userDesign";
+import { useScheduledVisitsStore } from "../../store/scheduledVisitsStore";
+import { useFavoritesStore } from "../../store/favoritesStore";
 import { getPublicListings } from "../../services/api";
 import {
   matchesAcType,
@@ -22,6 +26,7 @@ import {
   matchesRoomSharing,
 } from "../../services/pgFilters";
 import type { Listing } from "../../types/listing";
+import type { NewScheduledVisit } from "../../types/visit";
 
 type PgSearchFilters = {
   propertyType: string;
@@ -50,6 +55,19 @@ function parseArray(value?: string): string[] {
 }
 
 export default function PgResults() {
+  const [visitListing, setVisitListing] = useState<Listing | null>(null);
+  const [detailListing, setDetailListing] = useState<Listing | null>(null);
+  const addScheduledVisit = useScheduledVisitsStore(
+    (state) => state.addVisit
+  );
+  const showToast = useFavoritesStore((state) => state.showToast);
+
+  const submitVisitRequest = (visit: NewScheduledVisit) => {
+    addScheduledVisit(visit);
+    setVisitListing(null);
+    showToast("Visit request saved for this session.");
+  };
+
   const {
     propertyType: propertyTypeParam,
     pgCity: cityParam,
@@ -228,12 +246,8 @@ export default function PgResults() {
         renderItem={({ item }) => (
           <ListingCard
             listing={item}
-            onPress={() =>
-              router.push({
-                pathname: "/(user)/listing/[id]",
-                params: { id: String(item.id) },
-              })
-            }
+            onScheduleVisit={() => setVisitListing(item)}
+            onPress={() => setDetailListing(item)}
           />
         )}
         ListEmptyComponent={
@@ -273,6 +287,21 @@ export default function PgResults() {
             </View>
           )
         }
+      />
+      <ListingDetailSheet
+        visible={detailListing !== null}
+        listing={detailListing}
+        onClose={() => setDetailListing(null)}
+        onScheduleVisit={() => {
+          if (detailListing) setVisitListing(detailListing);
+          setDetailListing(null);
+        }}
+      />
+      <ScheduleVisitModal
+        visible={visitListing !== null}
+        listing={visitListing}
+        onClose={() => setVisitListing(null)}
+        onSubmit={submitVisitRequest}
       />
     </SafeAreaView>
   );

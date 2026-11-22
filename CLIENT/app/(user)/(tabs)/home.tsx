@@ -1,5 +1,4 @@
 import {
-  createRef,
   useCallback,
   useEffect,
   useMemo,
@@ -9,7 +8,6 @@ import {
 import type { ComponentRef } from "react";
 
 import {
-  Animated,
   ActivityIndicator,
   Alert,
   Keyboard,
@@ -18,19 +16,14 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   type TextInputInstance,
   type ScrollViewInstance,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { BlurTargetView, BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
+import { BlurTargetView } from "expo-blur";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import * as Location from "expo-location";
@@ -42,7 +35,10 @@ import {
 } from "expo-router";
 
 import ListingCard from "../../../components/ListingCard";
+import ListingDetailSheet from "../../../components/ListingDetailSheet";
 import ExploreNeedCard from "../../../components/ExploreNeedCard";
+import ScheduleVisitModal from "../../../components/ScheduleVisitModal";
+import { useAuth } from "../../../contexts/AuthContext";
 import {
   USER_SCREEN_BACKGROUND,
   USER_SOFT_SHADOW,
@@ -62,6 +58,9 @@ import {
   matchesRoomSharing,
 } from "../../../services/pgFilters";
 import type { Listing } from "../../../types/listing";
+import type { NewScheduledVisit } from "../../../types/visit";
+import { useScheduledVisitsStore } from "../../../store/scheduledVisitsStore";
+import { useFavoritesStore } from "../../../store/favoritesStore";
 
 /*
  * ============================================================================
@@ -98,6 +97,25 @@ type SortMode =
   | "recommended"
   | "price_low"
   | "price_high";
+
+type QuickFilter =
+  | "All"
+  | "Men's PG"
+  | "Women's PG"
+  | "Coliving"
+  | "Under ₹10k"
+  | "Food Included"
+  | "AC Rooms";
+
+const QUICK_FILTERS: QuickFilter[] = [
+  "All",
+  "Men's PG",
+  "Women's PG",
+  "Coliving",
+  "Under ₹10k",
+  "Food Included",
+  "AC Rooms",
+];
 
 type Coordinates = {
   latitude: number;
@@ -320,6 +338,25 @@ function normalizeText(
   return String(value ?? "")
     .trim()
     .toLowerCase();
+}
+
+function matchesQuickFilter(listing: Listing, filter: QuickFilter): boolean {
+  switch (filter) {
+    case "Men's PG":
+      return matchesPGType(listing.gender, ["Boy's"]);
+    case "Women's PG":
+      return matchesPGType(listing.gender, ["Girl's"]);
+    case "Coliving":
+      return matchesPGType(listing.gender, ["Co-living"]);
+    case "Under ₹10k":
+      return Number(listing.monthly_price) < 10000;
+    case "Food Included":
+      return normalizeText(listing.food_available) === "yes";
+    case "AC Rooms":
+      return matchesAcType(listing.ac_type, ["AC"]);
+    default:
+      return true;
+  }
 }
 
 /*
@@ -602,20 +639,27 @@ function RowLabel({
  */
 
 export default function UserHome() {
+  const { user } = useAuth();
+  const profileName = user?.full_name?.trim() ?? "";
+  const profileInitial = profileName.charAt(0).toUpperCase() || "?";
   const {
     activateBlurTarget,
     deactivateBlurTarget,
     onScroll: handleBottomNavigationScroll,
   } = useBottomNavigationScroll();
   const screenBlurTarget = useRef<ComponentRef<typeof View> | null>(null);
-  const { width: screenWidth } = useWindowDimensions();
-  const carouselCardWidth = screenWidth * 0.8;
-  const carouselGap = 10;
-  const carouselSnapInterval = carouselCardWidth + carouselGap;
-  const carouselSidePadding = (screenWidth - carouselCardWidth) / 2;
-  const carouselScrollX = useRef(new Animated.Value(0)).current;
-  const carouselRef = useRef<ScrollViewInstance | null>(null);
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [visitListing, setVisitListing] = useState<Listing | null>(null);
+  const [detailListing, setDetailListing] = useState<Listing | null>(null);
+  const addScheduledVisit = useScheduledVisitsStore(
+    (state) => state.addVisit
+  );
+  const showToast = useFavoritesStore((state) => state.showToast);
+
+  const submitVisitRequest = (visit: NewScheduledVisit) => {
+    addScheduledVisit(visit);
+    setVisitListing(null);
+    showToast("Visit request saved for this session.");
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -731,6 +775,7 @@ export default function UserHome() {
     useState<GenderFilter>(
       "All"
     );
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("All");
 
   const [pgFilterModalVisible, setPgFilterModalVisible] = useState(false);
 
@@ -1050,6 +1095,7 @@ export default function UserHome() {
   setSearchText("");
   setNearbyMode("all");
   setGenderFilter("All");
+  setQuickFilter("All");
   setSortMode("recommended");
   setSearchFocused(false);
 
@@ -1385,6 +1431,8 @@ export default function UserHome() {
         "All"
       );
 
+      setQuickFilter("All");
+
       setSortMode(
         "recommended"
       );
@@ -1632,6 +1680,7 @@ export default function UserHome() {
     async (
       resultFilter: "metro" | "it-park" | "coaching"
     ) => {
+      setQuickFilter("All");
       setLocationLoading(
         true
       );
@@ -2523,6 +2572,12 @@ export default function UserHome() {
             );
         }
 
+        if (quickFilter !== "All") {
+          items = items.filter(({ listing }) =>
+            matchesQuickFilter(listing, quickFilter)
+          );
+        }
+
         /*
          * ==============================================================
          * STEP 4
@@ -2645,34 +2700,9 @@ export default function UserHome() {
         currentPlace,
         sortMode,
         pgFilters,
+        quickFilter,
       ]
     );
-
-  const carouselBlurTargets = useMemo(
-    () => results.map(() => createRef<ComponentRef<typeof View>>()),
-    [results]
-  );
-
-  useEffect(() => {
-    setCarouselIndex(0);
-    carouselScrollX.setValue(0);
-    carouselRef.current?.scrollTo({ x: 0, animated: false });
-  }, [carouselSnapInterval, carouselScrollX, results]);
-
-  const updateCarouselIndex = (offsetX: number) => {
-    const lastIndex = Math.max(0, results.length - 1);
-    const nextIndex = Math.max(
-      0,
-      Math.min(Math.round(offsetX / carouselSnapInterval), lastIndex)
-    );
-    setCarouselIndex((current) =>
-      current === nextIndex ? current : nextIndex
-    );
-  };
-  const firstVisibleDotIndex = Math.max(
-    0,
-    Math.min(carouselIndex - 3, results.length - 7)
-  );
 
   /*
    * ==========================================================================
@@ -2709,6 +2739,7 @@ export default function UserHome() {
     isNearby ||
     genderFilter !==
     "All" ||
+    quickFilter !== "All" ||
     sortMode !==
     "recommended";
 
@@ -2850,6 +2881,7 @@ export default function UserHome() {
   };
 
   const handleGenderCategory = async (gender: GenderFilter) => {
+    setQuickFilter("All");
     setLocationLoading(true);
     try {
       const liveLocation =
@@ -2949,12 +2981,13 @@ export default function UserHome() {
             }. Tap to choose an area or city`}
             className="mr-3 flex-1 flex-row items-center"
           >
-            <MaterialCommunityIcons
-              name="navigation-variant"
-              size={22}
-              color="#2563EB"
-              style={{ marginRight: 10 }}
-            />
+            <View className="mr-3 h-9 w-9 items-center justify-center rounded-xl bg-[#EEF2FF]">
+              <MaterialCommunityIcons
+                name="map-marker"
+                size={21}
+                color="#4F46E5"
+              />
+            </View>
             <View className="flex-1">
               <View className="flex-row items-center">
                 <Text
@@ -2985,31 +3018,15 @@ export default function UserHome() {
 
           <View className="flex-row items-center">
             <Pressable
-              onPress={openPreferences}
-              accessibilityRole="button"
-              accessibilityLabel="Open filters"
-              testID="home-filter-button"
-              className="mr-2 h-10 w-10 items-center justify-center rounded-full bg-[#F1F5F9]"
-            >
-              <MaterialCommunityIcons
-                name="tune-variant"
-                size={21}
-                color="#475569"
-              />
-            </Pressable>
-
-            <Pressable
               onPress={() => router.push("/(user)/(tabs)/profile")}
               accessibilityRole="button"
               accessibilityLabel="Open profile"
               testID="home-profile-button"
-              className="h-10 w-10 items-center justify-center rounded-full bg-[#F1F5F9]"
+              className="h-10 w-10 items-center justify-center rounded-[12px] border-0 bg-[#6D4AFF]"
             >
-              <MaterialCommunityIcons
-                name="account-circle-outline"
-                size={22}
-                color="#475569"
-              />
+              <Text className="text-[16px] font-bold text-white">
+                {profileInitial}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -3072,6 +3089,20 @@ export default function UserHome() {
                 />
               </Pressable>
             ) : null}
+            <Pressable
+              onPress={openPreferences}
+              accessibilityRole="button"
+              accessibilityLabel="Open PG filters"
+              testID="home-filter-button"
+              hitSlop={6}
+              className="ml-1 h-9 w-9 items-center justify-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]"
+            >
+              <MaterialCommunityIcons
+                name="tune-variant"
+                size={19}
+                color="#4F46E5"
+              />
+            </Pressable>
           </View>
         </View>
 
@@ -3295,6 +3326,37 @@ export default function UserHome() {
             </Pressable>
           </View>
         </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="mb-3"
+          contentContainerStyle={{ paddingRight: 4 }}
+        >
+          {QUICK_FILTERS.map((filter) => {
+            const selected = quickFilter === filter;
+            return (
+              <Pressable
+                key={filter}
+                onPress={() => setQuickFilter(filter)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                className={`mr-2 rounded-full border px-3.5 py-2 ${
+                  selected
+                    ? "border-[#0F172A] bg-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white"
+                }`}
+              >
+                <Text
+                  className={`text-[11px] font-bold ${
+                    selected ? "text-white" : "text-[#475569]"
+                  }`}
+                >
+                  {filter}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
         {Object.values(proximityBadges).some(Boolean) ? (
           <Pressable
             onPress={() => void openMapDataAttribution()}
@@ -3362,197 +3424,44 @@ export default function UserHome() {
               )}
             </View>
           ) : (
-            <View>
-              <View style={{ marginHorizontal: -16, position: "relative" }}>
-                <Animated.ScrollView
-                  ref={carouselRef}
-                  horizontal
-                  nestedScrollEnabled
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{
-                    paddingHorizontal: carouselSidePadding,
-                    paddingVertical: 14,
-                  }}
-                  snapToInterval={carouselSnapInterval}
-                  snapToAlignment="start"
-                  decelerationRate="fast"
-                  scrollEventThrottle={16}
-                  onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { x: carouselScrollX } } }],
-                    {
-                      useNativeDriver: true,
-                      listener: (
-                        event: NativeSyntheticEvent<NativeScrollEvent>
-                      ) =>
-                        updateCarouselIndex(
-                          event.nativeEvent.contentOffset.x
-                        ),
-                    }
-                  )}
-                  onMomentumScrollEnd={(event) =>
-                    updateCarouselIndex(event.nativeEvent.contentOffset.x)
-                  }
-                  onScrollEndDrag={(event) =>
-                    updateCarouselIndex(event.nativeEvent.contentOffset.x)
-                  }
-                >
-                  {results.map(({ listing, distance }, index) => {
-                    const inputRange = [
-                      (index - 1) * carouselSnapInterval,
-                      index * carouselSnapInterval,
-                      (index + 1) * carouselSnapInterval,
-                    ];
-                    const scale = carouselScrollX.interpolate({
-                      inputRange,
-                      outputRange: [0.9, 1, 0.9],
-                      extrapolate: "clamp",
-                    });
-                    const opacity = carouselScrollX.interpolate({
-                      inputRange,
-                      outputRange: [0.58, 1, 0.58],
-                      extrapolate: "clamp",
-                    });
-                    const blurOpacity = carouselScrollX.interpolate({
-                      inputRange,
-                      outputRange: [0.4, 0, 0.4],
-                      extrapolate: "clamp",
-                    });
-                    const rotation = carouselScrollX.interpolate({
-                      inputRange,
-                      outputRange: ["14deg", "0deg", "-14deg"],
-                      extrapolate: "clamp",
-                    });
-                    const translateY = carouselScrollX.interpolate({
-                      inputRange,
-                      outputRange: [8, 0, 8],
-                      extrapolate: "clamp",
-                    });
-
-                    return (
-                      <Animated.View
-                        key={listing.id}
-                        style={{
-                          width: carouselCardWidth,
-                          marginRight:
-                            index < results.length - 1 ? carouselGap : 0,
-                          opacity,
-                          transform: [
-                            { perspective: 1000 },
-                            { rotateY: rotation },
-                            { scale },
-                            { translateY },
-                          ],
-                        }}
-                      >
-                        <BlurTargetView
-                          ref={carouselBlurTargets[index]}
-                          style={{ width: "100%" }}
-                        >
-                          {isNearby && distance !== null && (
-                            <Text className="mb-1.5 ml-1 text-[11px] font-bold text-[#2563EB]">
-                              📍 {formatDistance(distance)}
-                            </Text>
-                          )}
-                          <ListingCard
-                            listing={listing}
-                            imageHeight={220}
-                            focused={index === carouselIndex}
-                            proximityBadge={
-                              proximityBadges[listing.id] ?? null
-                            }
-                            onPress={() =>
-                              router.push({
-                                pathname: "/(user)/listing/[id]",
-                                params: { id: String(listing.id) },
-                              })
-                            }
-                          />
-                        </BlurTargetView>
-                        {Math.abs(index - carouselIndex) === 1 ? (
-                          <Animated.View
-                            pointerEvents="none"
-                            style={[
-                              StyleSheet.absoluteFill,
-                              { opacity: blurOpacity },
-                            ]}
-                          >
-                            <BlurView
-                              blurTarget={carouselBlurTargets[index]}
-                              blurMethod="dimezisBlurViewSdk31Plus"
-                              intensity={14}
-                              tint="light"
-                              style={[
-                                StyleSheet.absoluteFill,
-                                { borderRadius: 20 },
-                              ]}
-                            />
-                          </Animated.View>
-                        ) : null}
-                      </Animated.View>
-                    );
-                  })}
-                </Animated.ScrollView>
-                <LinearGradient
-                  pointerEvents="none"
-                  colors={[USER_SCREEN_BACKGROUND, "rgba(245,248,253,0)"]}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    bottom: 0,
-                    left: 0,
-                    width: 12,
-                  }}
-                />
-                <LinearGradient
-                  pointerEvents="none"
-                  colors={["rgba(245,248,253,0)", USER_SCREEN_BACKGROUND]}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    width: 12,
-                  }}
-                />
-              </View>
-              {results.length > 1 ? (
-                <View className="mt-1 flex-row items-center justify-center">
-                  {results
-                    .slice(firstVisibleDotIndex, firstVisibleDotIndex + 7)
-                    .map((result, dotIndex) => {
-                      const index = firstVisibleDotIndex + dotIndex;
-
-                      return (
-                        <Pressable
-                          key={result.listing.id}
-                          onPress={() => {
-                            setCarouselIndex(index);
-                            carouselRef.current?.scrollTo({
-                              x: index * carouselSnapInterval,
-                              animated: true,
-                            });
-                          }}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Show stay ${index + 1} of ${results.length}`}
-                          hitSlop={6}
-                          className="items-center justify-center px-1.5 py-2"
-                        >
-                          <View
-                            className={`h-1.5 rounded-full ${
-                              index === carouselIndex
-                                ? "w-5 bg-[#2563EB]"
-                                : "w-1.5 bg-[#CBD5E1]"
-                            }`}
-                          />
-                        </Pressable>
-                      );
-                    })}
+            <View className="pt-3">
+              {results.map(({ listing, distance }) => (
+                <View key={listing.id}>
+                  {isNearby && distance !== null ? (
+                    <Text className="mb-2 ml-1 text-[11px] font-bold text-[#2563EB]">
+                      📍 {formatDistance(distance)}
+                    </Text>
+                  ) : null}
+                  <ListingCard
+                    listing={listing}
+                    imageHeight={220}
+                    proximityBadge={proximityBadges[listing.id] ?? null}
+                    onScheduleVisit={() => setVisitListing(listing)}
+                    onPress={() => setDetailListing(listing)}
+                  />
                 </View>
-              ) : null}
+              ))}
             </View>
           )}
         </View>
       </ScrollView>
+
+      <ListingDetailSheet
+        visible={detailListing !== null}
+        listing={detailListing}
+        onClose={() => setDetailListing(null)}
+        onScheduleVisit={() => {
+          if (detailListing) setVisitListing(detailListing);
+          setDetailListing(null);
+        }}
+      />
+
+      <ScheduleVisitModal
+        visible={visitListing !== null}
+        listing={visitListing}
+        onClose={() => setVisitListing(null)}
+        onSubmit={submitVisitRequest}
+      />
 
       <Modal
         visible={locationPickerVisible}

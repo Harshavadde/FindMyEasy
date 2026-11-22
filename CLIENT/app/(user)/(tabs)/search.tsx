@@ -16,13 +16,18 @@ import { BlurTargetView } from "expo-blur";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { router, useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import ListingCard from "../../../components/ListingCard";
+import ListingDetailSheet from "../../../components/ListingDetailSheet";
+import ScheduleVisitModal from "../../../components/ScheduleVisitModal";
 import { USER_SCREEN_BACKGROUND } from "../../../constants/userDesign";
 import { useBottomNavigationScroll } from "../../../contexts/BottomNavigationScrollContext";
 import { getPublicListings } from "../../../services/api";
 import type { Listing } from "../../../types/listing";
+import type { NewScheduledVisit } from "../../../types/visit";
+import { useFavoritesStore } from "../../../store/favoritesStore";
+import { useScheduledVisitsStore } from "../../../store/scheduledVisitsStore";
 
 type SuggestionType = "property" | "area" | "city";
 
@@ -62,6 +67,9 @@ function getSuggestionIcon(type: SuggestionType): string {
 }
 
 export default function UserSearch() {
+  const { query: queryParam } = useLocalSearchParams<{
+    query?: string | string[];
+  }>();
   const {
     activateBlurTarget,
     deactivateBlurTarget,
@@ -69,6 +77,10 @@ export default function UserSearch() {
   } = useBottomNavigationScroll();
   const screenBlurTarget = useRef<ComponentRef<typeof View> | null>(null);
   const [query, setQuery] = useState("");
+  const [detailListing, setDetailListing] = useState<Listing | null>(null);
+  const [visitListing, setVisitListing] = useState<Listing | null>(null);
+  const addScheduledVisit = useScheduledVisitsStore((state) => state.addVisit);
+  const showToast = useFavoritesStore((state) => state.showToast);
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,6 +88,11 @@ export default function UserSearch() {
   const [searchFocused, setSearchFocused] = useState(false);
   const inputRef = useRef<TextInputInstance | null>(null);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const initialQuery = Array.isArray(queryParam) ? queryParam[0] : queryParam;
+    if (typeof initialQuery === "string") setQuery(initialQuery);
+  }, [queryParam]);
 
   useFocusEffect(
     useCallback(() => {
@@ -180,14 +197,17 @@ export default function UserSearch() {
     setSearchFocused(false);
 
     if (suggestion.type === "property" && suggestion.listing) {
-      router.push({
-        pathname: "/(user)/listing/[id]",
-        params: { id: String(suggestion.listing.id) },
-      });
+      setDetailListing(suggestion.listing);
       return;
     }
 
     setQuery(suggestion.title);
+  };
+
+  const submitVisitRequest = (visit: NewScheduledVisit) => {
+    addScheduledVisit(visit);
+    setVisitListing(null);
+    showToast("Visit request saved for this session.");
   };
 
   const onRefresh = () => {
@@ -382,12 +402,8 @@ export default function UserSearch() {
         renderItem={({ item }) => (
           <ListingCard
             listing={item}
-            onPress={() =>
-              router.push({
-                pathname: "/(user)/listing/[id]",
-                params: { id: String(item.id) },
-              })
-            }
+            onPress={() => setDetailListing(item)}
+            onScheduleVisit={() => setVisitListing(item)}
           />
         )}
         ListEmptyComponent={
@@ -428,6 +444,21 @@ export default function UserSearch() {
             </View>
           )
         }
+      />
+      <ListingDetailSheet
+        visible={detailListing !== null}
+        listing={detailListing}
+        onClose={() => setDetailListing(null)}
+        onScheduleVisit={() => {
+          if (detailListing) setVisitListing(detailListing);
+          setDetailListing(null);
+        }}
+      />
+      <ScheduleVisitModal
+        visible={visitListing !== null}
+        listing={visitListing}
+        onClose={() => setVisitListing(null)}
+        onSubmit={submitVisitRequest}
       />
       </SafeAreaView>
     </BlurTargetView>

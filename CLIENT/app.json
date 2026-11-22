@@ -13,6 +13,9 @@
         "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
       },
       "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "whatsapp"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
